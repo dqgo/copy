@@ -44,6 +44,94 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 
+// i18n translations
+object AppStrings {
+    private val translations = mapOf(
+        "zh-CN" to mapOf(
+            "status" to "状态",
+            "devices" to "可信设备",
+            "pairing" to "配对请求",
+            "history" to "历史记录",
+            "settings" to "设置",
+            "connection" to "连接状态",
+            "sent" to "发出",
+            "received" to "接收",
+            "rejected" to "拒绝",
+            "trustedCount" to "可信设备数",
+            "pendingPairing" to "待批准",
+            "approve" to "批准",
+            "reject" to "拒绝",
+            "revoke" to "撤销",
+            "language" to "语言",
+            "darkMode" to "深色模式",
+            "syncMode" to "同步模式",
+            "space" to "工作空间",
+            "pairingPolicy" to "配对策略",
+            "webdev" to "WebDev 同步",
+            "server" to "本地服务模式",
+            "justNow" to "刚刚",
+            "minAgo" to "分钟前",
+            "hoursAgo" to "小时前",
+            "daysAgo" to "天前",
+            "manual" to "手动",
+            "auto" to "自动",
+            "default" to "默认",
+            "work" to "工作",
+            "lab" to "实验室",
+            "manualApprove" to "手动批准",
+            "autoApproveInvite" to "邀请自动批准",
+            "noDevices" to "暂无设备",
+            "noPairingRequests" to "暂无配对请求",
+            "noHistory" to "暂无历史记录",
+            "confirmRevoke" to "确认撤销此设备吗？",
+            "confirmReject" to "确认拒绝此请求吗？"
+        ),
+        "en-US" to mapOf(
+            "status" to "Status",
+            "devices" to "Trusted Devices",
+            "pairing" to "Pairing Requests",
+            "history" to "History",
+            "settings" to "Settings",
+            "connection" to "Connection",
+            "sent" to "Sent",
+            "received" to "Received",
+            "rejected" to "Rejected",
+            "trustedCount" to "Trusted Devices",
+            "pendingPairing" to "Pending",
+            "approve" to "Approve",
+            "reject" to "Reject",
+            "revoke" to "Revoke",
+            "language" to "Language",
+            "darkMode" to "Dark Mode",
+            "syncMode" to "Sync Mode",
+            "space" to "Space",
+            "pairingPolicy" to "Pairing Policy",
+            "webdev" to "WebDev Sync",
+            "server" to "Local Server Mode",
+            "justNow" to "just now",
+            "minAgo" to "min ago",
+            "hoursAgo" to "hours ago",
+            "daysAgo" to "days ago",
+            "manual" to "Manual",
+            "auto" to "Auto",
+            "default" to "Default",
+            "work" to "Work",
+            "lab" to "Lab",
+            "manualApprove" to "Manual Approve",
+            "autoApproveInvite" to "Auto-Approve Invite",
+            "noDevices" to "No devices",
+            "noPairingRequests" to "No pairing requests",
+            "noHistory" to "No history",
+            "confirmRevoke" to "Confirm revoking this device?",
+            "confirmReject" to "Confirm rejecting this request?"
+        )
+    )
+
+    fun get(language: String, key: String): String {
+        return translations[language]?.get(key) ?: translations["en-US"]?.get(key) ?: key
+    }
+}
+
 data class TrustedDeviceUi(
     val deviceId: String,
     val displayName: String,

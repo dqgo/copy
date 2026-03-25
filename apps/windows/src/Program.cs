@@ -594,4 +594,7 @@ internal static class Program
         c.ForeColor = fg;
         foreach (Control child in c.Controls)
         {
-            ApplyThemeRecursive(child, b
+            ApplyThemeRecursive(child, bg, fg);
+        }
+    }
+}
