@@ -23,6 +23,8 @@ struct MacL10n {
             "webdevUrl": "WebDev 地址",
             "webdevUser": "WebDev 用户名",
             "webdevPassword": "WebDev 密码",
+            "testWebdev": "测试 WebDev 连接",
+            "webdevFail": "WebDev 连接失败",
             "server": "本地服务模式",
             "manualSync": "手动同步",
             "lastError": "最近错误",
@@ -54,6 +56,8 @@ struct MacL10n {
             "webdevUrl": "WebDev URL",
             "webdevUser": "WebDev Username",
             "webdevPassword": "WebDev Password",
+            "testWebdev": "Test WebDev Connection",
+            "webdevFail": "WebDev connection failed",
             "server": "Local Server Mode",
             "manualSync": "Manual Sync",
             "lastError": "Last Error",
@@ -154,6 +158,11 @@ struct MacStatusMenuView: View {
             TextField(MacL10n.get(settings.language, "webdevUrl"), text: $settings.webDevBaseUrl)
             TextField(MacL10n.get(settings.language, "webdevUser"), text: $settings.webDevUsername)
             SecureField(MacL10n.get(settings.language, "webdevPassword"), text: $settings.webDevPassword)
+            Button(MacL10n.get(settings.language, "testWebdev")) {
+                Task {
+                    await testWebDavConnection()
+                }
+            }
             Toggle(MacL10n.get(settings.language, "server"), isOn: $settings.localServerEnabled)
         }
         .padding(12)
@@ -203,6 +212,39 @@ struct MacStatusMenuView: View {
             status.syncedOutCount += 1
             status.syncedInCount += 1
             status.lastErrorMessage = nil
+        }
+    }
+
+    private func testWebDavConnection() async {
+        guard settings.webDevEnabled, !settings.webDevBaseUrl.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            await MainActor.run {
+                status.lastErrorMessage = MacL10n.get(settings.language, "webdevFail")
+            }
+            return
+        }
+
+        let base = settings.webDevBaseUrl.hasSuffix("/") ? settings.webDevBaseUrl : settings.webDevBaseUrl + "/"
+        guard let url = URL(string: base) else {
+            await MainActor.run {
+                status.lastErrorMessage = MacL10n.get(settings.language, "webdevFail")
+            }
+            return
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "HEAD"
+        applyBasicAuth(&request)
+
+        do {
+            let (_, response) = try await URLSession.shared.data(for: request)
+            let ok = (response as? HTTPURLResponse).map { (200...299).contains($0.statusCode) } ?? false
+            await MainActor.run {
+                status.lastErrorMessage = ok ? nil : MacL10n.get(settings.language, "webdevFail")
+            }
+        } catch {
+            await MainActor.run {
+                status.lastErrorMessage = MacL10n.get(settings.language, "webdevFail")
+            }
         }
     }
 

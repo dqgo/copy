@@ -27,6 +27,9 @@ struct L10n {
             "webdevUrl": "WebDev 地址",
             "webdevUser": "WebDev 用户名",
             "webdevPassword": "WebDev 密码",
+            "testWebdev": "测试 WebDev 连接",
+            "webdevOk": "WebDev 连接成功",
+            "webdevFail": "WebDev 连接失败",
             "server": "本地服务模式",
             "manualSync": "手动同步",
             "noDevices": "暂无设备",
@@ -67,6 +70,9 @@ struct L10n {
             "webdevUrl": "WebDev URL",
             "webdevUser": "WebDev Username",
             "webdevPassword": "WebDev Password",
+            "testWebdev": "Test WebDev Connection",
+            "webdevOk": "WebDev connection succeeded",
+            "webdevFail": "WebDev connection failed",
             "server": "Local Server Mode",
             "manualSync": "Manual Sync",
             "noDevices": "No devices",
@@ -427,6 +433,11 @@ struct IOSDashboardView: View {
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled(true)
                 SecureField(L10n.get(settings.language, "webdevPassword"), text: $settings.webDevPassword)
+                Button(L10n.get(settings.language, "testWebdev")) {
+                    Task {
+                        await testWebDavConnection()
+                    }
+                }
                 Toggle(L10n.get(settings.language, "server"), isOn: $settings.localServerEnabled)
             }
             .navigationTitle(L10n.get(settings.language, "settings"))
@@ -483,6 +494,48 @@ struct IOSDashboardView: View {
             status.lastErrorMessage = nil
             errorMessage = nil
             history.insert(HistoryItem(direction: "out", contentType: "text/plain", preview: "manual sync", at: "now"), at: 0)
+        }
+    }
+
+    private func testWebDavConnection() async {
+        guard settings.webDevEnabled, !settings.webDevBaseUrl.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            await MainActor.run {
+                status.lastErrorMessage = L10n.get(settings.language, "webdevFail")
+                errorMessage = L10n.get(settings.language, "webdevFail")
+            }
+            return
+        }
+
+        let base = settings.webDevBaseUrl.hasSuffix("/") ? settings.webDevBaseUrl : settings.webDevBaseUrl + "/"
+        guard let url = URL(string: base) else {
+            await MainActor.run {
+                status.lastErrorMessage = L10n.get(settings.language, "webdevFail")
+                errorMessage = L10n.get(settings.language, "webdevFail")
+            }
+            return
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "HEAD"
+        applyBasicAuth(&request)
+
+        do {
+            let (_, response) = try await URLSession.shared.data(for: request)
+            let ok = (response as? HTTPURLResponse).map { (200...299).contains($0.statusCode) } ?? false
+            await MainActor.run {
+                if ok {
+                    status.lastErrorMessage = nil
+                    errorMessage = nil
+                } else {
+                    status.lastErrorMessage = L10n.get(settings.language, "webdevFail")
+                    errorMessage = L10n.get(settings.language, "webdevFail")
+                }
+            }
+        } catch {
+            await MainActor.run {
+                status.lastErrorMessage = L10n.get(settings.language, "webdevFail")
+                errorMessage = L10n.get(settings.language, "webdevFail")
+            }
         }
     }
 

@@ -94,6 +94,7 @@ internal static class Program
             ["webdevUrl"] = "WebDev 地址",
             ["webdevUser"] = "WebDev 用户名",
             ["webdevPassword"] = "WebDev 密码",
+            ["testWebdev"] = "测试 WebDev 连接",
             ["server"] = "启用本地服务模式",
             ["sendHtml"] = "发送 HTML",
             ["sendImage"] = "发送图片",
@@ -151,6 +152,7 @@ internal static class Program
             ["webdevUrl"] = "WebDev URL",
             ["webdevUser"] = "WebDev Username",
             ["webdevPassword"] = "WebDev Password",
+            ["testWebdev"] = "Test WebDev Connection",
             ["server"] = "Enable Local Server Mode",
             ["sendHtml"] = "Send HTML",
             ["sendImage"] = "Send Image",
@@ -342,6 +344,24 @@ internal static class Program
         var webdavUrlText = new TextBox { Width = 320, Text = loadedWebDav.BaseUrl };
         var webdavUserText = new TextBox { Width = 220, Text = loadedWebDav.Username };
         var webdavPasswordText = new TextBox { Width = 220, Text = loadedWebDav.Password, UseSystemPasswordChar = true };
+        var webdavTestBtn = new Button { Text = T(locale, "testWebdev"), Width = 220, Height = 30 };
+        webdavTestBtn.Click += async (_, _) =>
+        {
+            service.SaveWebDavSettings(webdavUrlText.Text, webdavUserText.Text, webdavPasswordText.Text, webdevCheck.Checked);
+            var ok = await service.TestWebDavConnectionAsync();
+            if (ok)
+            {
+                status.LastErrorMessage = string.Empty;
+                errValue.Text = "None";
+                history.Items.Insert(0, "[event] webdev · connection ok");
+            }
+            else
+            {
+                status.LastErrorMessage = "WebDev connection failed";
+                errValue.Text = status.LastErrorMessage;
+                history.Items.Insert(0, "[error] webdev · connection failed");
+            }
+        };
         var manualSync = new Button { Text = T(locale, "manualSync"), Width = 180, Height = 34 };
         manualSync.Click += async (_, _) =>
         {
@@ -573,7 +593,7 @@ internal static class Program
             if (langCombo.SelectedItem is string lang)
             {
                 locale = lang;
-                ApplyLocale(form, tabs, statusTab, devicesTab, historyTab, pairingTab, settingsTab, manualSync, revoke, approve, reject, webdevCheck, serverCheck, locale);
+                ApplyLocale(form, tabs, statusTab, devicesTab, historyTab, pairingTab, settingsTab, manualSync, revoke, approve, reject, webdevCheck, serverCheck, webdavTestBtn, locale);
             }
         };
 
@@ -610,6 +630,7 @@ internal static class Program
         settingsGrid.Controls.Add(new Label { Text = T(locale, "webdevPassword"), AutoSize = true, Font = new Font("Segoe UI", 10, FontStyle.Bold) }, 0, 8);
         settingsGrid.Controls.Add(webdavPasswordText, 1, 8);
         settingsGrid.Controls.Add(serverCheck, 1, 9);
+        settingsGrid.Controls.Add(webdavTestBtn, 1, 10);
         settingsTab.Controls.Add(settingsGrid);
 
         root.Controls.Add(header, 0, 0);
@@ -651,7 +672,7 @@ internal static class Program
             {
                 form.Hide();
                 notifyIcon.ShowBalloonTip(1200, "Clipboard Sync", "应用仍在托盘中运行", ToolTipIcon.Info);
-                ApplyLocale(form, tabs, statusTab, devicesTab, historyTab, pairingTab, settingsTab, manualSync, revoke, approve, reject, webdevCheck, serverCheck, locale);
+                ApplyLocale(form, tabs, statusTab, devicesTab, historyTab, pairingTab, settingsTab, manualSync, revoke, approve, reject, webdevCheck, serverCheck, webdavTestBtn, locale);
             }
         };
 
@@ -696,6 +717,7 @@ internal static class Program
         Button reject,
         CheckBox webdev,
         CheckBox server,
+        Button testWebdev,
         string locale)
     {
         form.Text = T(locale, "title");
@@ -710,6 +732,7 @@ internal static class Program
         reject.Text = T(locale, "reject");
         webdev.Text = T(locale, "webdev");
         server.Text = T(locale, "server");
+        testWebdev.Text = T(locale, "testWebdev");
         tabs.Refresh();
     }
 

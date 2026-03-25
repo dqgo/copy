@@ -88,6 +88,9 @@ object AppStrings {
             "webdevUrl" to "WebDev 地址",
             "webdevUser" to "WebDev 用户名",
             "webdevPassword" to "WebDev 密码",
+            "testWebdev" to "测试 WebDev 连接",
+            "webdevOk" to "WebDev 连接成功",
+            "webdevFail" to "WebDev 连接失败",
             "server" to "本地服务模式",
             "manualSync" to "手动同步",
             "sendHtml" to "发送 HTML",
@@ -131,6 +134,9 @@ object AppStrings {
             "webdevUrl" to "WebDev URL",
             "webdevUser" to "WebDev Username",
             "webdevPassword" to "WebDev Password",
+            "testWebdev" to "Test WebDev Connection",
+            "webdevOk" to "WebDev connection succeeded",
+            "webdevFail" to "WebDev connection failed",
             "server" to "Local Server Mode",
             "manualSync" to "Manual Sync",
             "sendHtml" to "Send HTML",
@@ -470,9 +476,32 @@ private fun ClipboardSyncAndroidApp() {
                                 onQueryChange = { historyQuery = it }
                             )
 
-                            else -> SettingsTab(state.settings, state.settings.language) { updated ->
-                                state = state.copy(settings = updated)
-                            }
+                            else -> SettingsTab(
+                                settings = state.settings,
+                                language = state.settings.language,
+                                onChange = { updated ->
+                                    state = state.copy(settings = updated)
+                                },
+                                onTestWebDav = {
+                                    val cfg = WebDavConfig(
+                                        enabled = state.settings.webDevEnabled,
+                                        baseUrl = state.settings.webDevBaseUrl,
+                                        username = state.settings.webDevUsername,
+                                        password = state.settings.webDevPassword
+                                    )
+                                    coroutineScope.launch(Dispatchers.IO) {
+                                        val ok = WebDavClient.test(cfg)
+                                        withContext(Dispatchers.Main) {
+                                            state = state.copy(
+                                                status = state.status.copy(
+                                                    lastErrorMessage = if (ok) "None" else AppStrings.get(state.settings.language, "webdevFail")
+                                                ),
+                                                errorMessage = if (ok) null else AppStrings.get(state.settings.language, "webdevFail")
+                                            )
+                                        }
+                                    }
+                                }
+                            )
                         }
                     }
                 }
@@ -667,7 +696,12 @@ private fun HistoryTab(history: List<HistoryUi>, language: String, query: String
 }
 
 @Composable
-private fun SettingsTab(settings: SettingsUi, language: String, onChange: (SettingsUi) -> Unit) {
+private fun SettingsTab(
+    settings: SettingsUi,
+    language: String,
+    onChange: (SettingsUi) -> Unit,
+    onTestWebDav: () -> Unit
+) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             StatusRow(AppStrings.get(language, "language"), settings.language)
@@ -699,6 +733,9 @@ private fun SettingsTab(settings: SettingsUi, language: String, onChange: (Setti
                 label = { Text(AppStrings.get(language, "webdevPassword")) },
                 modifier = Modifier.fillMaxWidth()
             )
+            Button(onClick = onTestWebDav) {
+                Text(AppStrings.get(language, "testWebdev"))
+            }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(AppStrings.get(language, "server"))
                 Spacer(modifier = Modifier.weight(1f))
