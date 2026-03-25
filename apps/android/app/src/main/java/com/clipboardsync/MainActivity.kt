@@ -1,6 +1,7 @@
 package com.clipboardsync
 
 import android.content.Intent
+import android.content.Context
 import android.os.Build
 import android.os.Bundle
 import android.app.NotificationChannel
@@ -57,6 +58,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -239,6 +241,8 @@ class MainActivity : ComponentActivity() {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ClipboardSyncAndroidApp() {
+    val context = LocalContext.current
+    val prefs = remember { context.getSharedPreferences("clipboardsync_settings", Context.MODE_PRIVATE) }
     val systemDarkTheme = isSystemInDarkTheme()
     var selectedTab by remember { mutableStateOf(0) }
     var deviceQuery by remember { mutableStateOf("") }
@@ -249,36 +253,29 @@ private fun ClipboardSyncAndroidApp() {
         mutableStateOf(
             DashboardState(
                 status = StatusViewModel(
-                    connectionState = SyncConnectionState.CONNECTED,
-                    syncedOutCount = 3,
-                    syncedInCount = 2,
+                    connectionState = SyncConnectionState.DISCONNECTED,
+                    syncedOutCount = 0,
+                    syncedInCount = 0,
                     rejectedEventCount = 0,
-                    trustedDeviceCount = 3,
-                    pendingPairingCount = 1,
-                    lastErrorMessage = "None"
+                    trustedDeviceCount = 0,
+                    pendingPairingCount = 0,
+                    lastErrorMessage = null
                 ),
-                devices = listOf(
-                    TrustedDeviceUi("android-main", "Android Phone", "just now"),
-                    TrustedDeviceUi("win-local", "Windows Desktop", "2 min ago"),
-                    TrustedDeviceUi("ios-handset", "iPhone", "8 min ago")
-                ),
-                history = listOf(
-                    HistoryUi("out", "text/plain", "hello from android", "10:03"),
-                    HistoryUi("in", "text/plain", "copied on windows", "09:56")
-                ),
+                devices = emptyList(),
+                history = emptyList(),
                 settings = SettingsUi(
-                    language = "zh-CN",
-                    darkMode = systemDarkTheme,
-                    syncMode = "manual",
-                    spaceId = "default",
-                    webDevEnabled = false,
-                    webDevBaseUrl = "",
-                    webDevUsername = "",
-                    webDevPassword = "",
-                    localServerEnabled = false,
-                    pairingPolicy = "manual-approve"
+                    language = prefs.getString("language", "zh-CN") ?: "zh-CN",
+                    darkMode = prefs.getBoolean("dark_mode", systemDarkTheme),
+                    syncMode = prefs.getString("sync_mode", "manual") ?: "manual",
+                    spaceId = prefs.getString("space_id", "default") ?: "default",
+                    webDevEnabled = prefs.getBoolean("webdav_enabled", false),
+                    webDevBaseUrl = prefs.getString("webdav_base_url", "") ?: "",
+                    webDevUsername = prefs.getString("webdav_username", "") ?: "",
+                    webDevPassword = prefs.getString("webdav_password", "") ?: "",
+                    localServerEnabled = prefs.getBoolean("local_server_enabled", false),
+                    pairingPolicy = prefs.getString("pairing_policy", "manual-approve") ?: "manual-approve"
                 ),
-                pairingRequests = listOf(PairingRequestUi("req-and-001", "iPad Air", "ios", "10:22"))
+                pairingRequests = emptyList()
             )
         )
     }
@@ -407,7 +404,7 @@ private fun ClipboardSyncAndroidApp() {
                                 onSendFileRef = {
                                     state = state.copy(
                                         status = state.status.copy(syncedOutCount = state.status.syncedOutCount + 1),
-                                        history = listOf(HistoryUi("out", "application/x-clipboard-file-ref", "C:/tmp/demo.txt", "now")) + state.history
+                                        history = listOf(HistoryUi("out", "application/x-clipboard-file-ref", "local-file-ref", "now")) + state.history
                                     )
                                 }
                             )
@@ -484,6 +481,18 @@ private fun ClipboardSyncAndroidApp() {
                                 settings = state.settings,
                                 language = state.settings.language,
                                 onChange = { updated ->
+                                    prefs.edit()
+                                        .putString("language", updated.language)
+                                        .putBoolean("dark_mode", updated.darkMode)
+                                        .putString("sync_mode", updated.syncMode)
+                                        .putString("space_id", updated.spaceId)
+                                        .putBoolean("webdav_enabled", updated.webDevEnabled)
+                                        .putString("webdav_base_url", updated.webDevBaseUrl)
+                                        .putString("webdav_username", updated.webDevUsername)
+                                        .putString("webdav_password", updated.webDevPassword)
+                                        .putBoolean("local_server_enabled", updated.localServerEnabled)
+                                        .putString("pairing_policy", updated.pairingPolicy)
+                                        .apply()
                                     state = state.copy(settings = updated)
                                 },
                                 onTestWebDav = {

@@ -190,7 +190,7 @@ internal static class Program
     {
         ApplicationConfiguration.Initialize();
 
-        var reader = new MemoryClipboardReader("hello");
+        var reader = new MemoryClipboardReader(null);
         var writer = new MemoryClipboardWriter();
         var store = new SecureStoreAdapter();
         var service = new SyncService(reader, writer, store);
@@ -203,32 +203,21 @@ internal static class Program
 
         var status = new StatusViewModel
         {
-            ConnectionState = SyncConnectionState.Connected,
-            SyncedOutCount = 1,
-            SyncedInCount = 1,
+            ConnectionState = SyncConnectionState.Disconnected,
+            SyncedOutCount = 0,
+            SyncedInCount = 0,
             RejectedEventCount = 0,
-            TrustedDeviceCount = 3,
-            PendingPairingCount = 2,
+            TrustedDeviceCount = 0,
+            PendingPairingCount = 0,
             LastErrorMessage = string.Empty
         };
 
-        var trustedDevices = new List<DeviceItem>
-        {
-            new DeviceItem("win-local", "Windows Desktop", "just now"),
-            new DeviceItem("android-main", "Android Phone", "2 min ago"),
-            new DeviceItem("ios-handset", "iPhone", "6 min ago")
-        };
+        var trustedDevices = new List<DeviceItem>();
 
         var history = new ListBox { Dock = DockStyle.Fill };
-        history.Items.Add("[out] text/plain · hello");
-        history.Items.Add("[in] text/plain · reply from mobile");
-        history.Items.Add($"[secure-store] workspace key loaded · {workspaceKey[..Math.Min(12, workspaceKey.Length)]}...");
+        history.Items.Add("[info] workspace key loaded");
 
-        var pairingRequests = new List<PairingRequestItem>
-        {
-            new PairingRequestItem("req-win-001", "iPad Air", "ios", "10:24"),
-            new PairingRequestItem("req-win-002", "Pixel 9", "android", "10:26")
-        };
+        var pairingRequests = new List<PairingRequestItem>();
 
         var locale = "zh-CN";
 
@@ -337,7 +326,7 @@ internal static class Program
         {
             status.SyncedOutCount += 1;
             sentValue.Text = status.SyncedOutCount.ToString();
-            history.Items.Insert(0, "[out] application/x-clipboard-file-ref · C:/tmp/demo.txt");
+            history.Items.Insert(0, "[out] application/x-clipboard-file-ref · local-file-ref");
         };
 
         quickActions.Controls.Add(sendHtml);
@@ -346,7 +335,7 @@ internal static class Program
 
         var loadedWebDav = service.LoadWebDavSettings();
         var webdevCheck = new CheckBox { Text = T(locale, "webdev"), AutoSize = true, Checked = loadedWebDav.Enabled };
-        var serverCheck = new CheckBox { Text = T(locale, "server"), AutoSize = true };
+        var serverCheck = new CheckBox { Text = T(locale, "server"), AutoSize = true, Checked = store.Get("local_server_enabled") == "1" };
         var webdavUrlText = new TextBox { Width = 320, Text = loadedWebDav.BaseUrl };
         var webdavUserText = new TextBox { Width = 220, Text = loadedWebDav.Username };
         var webdavPasswordText = new TextBox { Width = 220, Text = loadedWebDav.Password, UseSystemPasswordChar = true };
@@ -581,15 +570,15 @@ internal static class Program
 
         var modeCombo = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 220 };
         modeCombo.Items.AddRange(new object[] { "manual", "auto" });
-        modeCombo.SelectedItem = "manual";
+        modeCombo.SelectedItem = store.Get("sync_mode") ?? "manual";
 
         var spaceCombo = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 220 };
         spaceCombo.Items.AddRange(new object[] { "default", "work", "lab" });
-        spaceCombo.SelectedItem = "default";
+        spaceCombo.SelectedItem = store.Get("space_id") ?? "default";
 
         var pairingPolicyCombo = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 220 };
         pairingPolicyCombo.Items.AddRange(new object[] { "manual-approve", "auto-approve-invite" });
-        pairingPolicyCombo.SelectedItem = "manual-approve";
+        pairingPolicyCombo.SelectedItem = store.Get("pairing_policy") ?? "manual-approve";
 
         webdevCheck.Text = T(locale, "webdev");
         serverCheck.Text = T(locale, "server");
@@ -613,6 +602,35 @@ internal static class Program
             {
                 ApplyTheme(form, false);
             }
+        };
+
+        modeCombo.SelectedIndexChanged += (_, _) =>
+        {
+            if (modeCombo.SelectedItem is string value)
+            {
+                store.Set("sync_mode", value);
+            }
+        };
+
+        spaceCombo.SelectedIndexChanged += (_, _) =>
+        {
+            if (spaceCombo.SelectedItem is string value)
+            {
+                store.Set("space_id", value);
+            }
+        };
+
+        pairingPolicyCombo.SelectedIndexChanged += (_, _) =>
+        {
+            if (pairingPolicyCombo.SelectedItem is string value)
+            {
+                store.Set("pairing_policy", value);
+            }
+        };
+
+        serverCheck.CheckedChanged += (_, _) =>
+        {
+            store.Set("local_server_enabled", serverCheck.Checked ? "1" : "0");
         };
 
         // Apply system-detected theme on startup

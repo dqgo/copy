@@ -144,31 +144,22 @@ struct IOSDashboardView: View {
     @State private var pairingQuery = ""
 
     @State private var status = StatusViewModel(
-        connectionState: .connected,
-        syncedOutCount: 2,
-        syncedInCount: 2,
+        connectionState: .disconnected,
+        syncedOutCount: 0,
+        syncedInCount: 0,
         rejectedEventCount: 0,
-        trustedDeviceCount: 3,
-        pendingPairingCount: 1,
+        trustedDeviceCount: 0,
+        pendingPairingCount: 0,
         lastErrorMessage: nil
     )
 
     @State private var errorMessage: String? = nil
 
-    @State private var trustedDevices: [TrustedDevice] = [
-        TrustedDevice(id: "ios-handset", name: "iPhone", lastSeen: "just now"),
-        TrustedDevice(id: "win-local", name: "Windows Desktop", lastSeen: "3 min ago"),
-        TrustedDevice(id: "android-main", name: "Android Phone", lastSeen: "10 min ago")
-    ]
+    @State private var trustedDevices: [TrustedDevice] = []
 
-    @State private var history: [HistoryItem] = [
-        HistoryItem(direction: "out", contentType: "text/plain", preview: "hello from iPhone", at: "10:05"),
-        HistoryItem(direction: "in", contentType: "text/plain", preview: "copied on Windows", at: "09:58")
-    ]
+    @State private var history: [HistoryItem] = []
 
-    @State private var pairingRequests: [PairingRequest] = [
-        PairingRequest(id: "req-ios-001", deviceName: "Galaxy S24", platform: "android", requestedAt: "10:08")
-    ]
+    @State private var pairingRequests: [PairingRequest] = []
 
     @State private var settings = SettingsModel(
         language: "zh-CN",
@@ -245,6 +236,27 @@ struct IOSDashboardView: View {
             settings.webDevBaseUrl = store.get("webdav_base_url") ?? ""
             settings.webDevUsername = store.get("webdav_username") ?? ""
             settings.webDevPassword = store.get("webdav_password") ?? ""
+            settings.localServerEnabled = store.get("local_server_enabled") == "1"
+        }
+        .onChange(of: settings.webDevEnabled) { _, newValue in
+            let store = SecureStoreAdapter()
+            store.set("webdav_enabled", value: newValue ? "1" : "0")
+        }
+        .onChange(of: settings.webDevBaseUrl) { _, newValue in
+            let store = SecureStoreAdapter()
+            store.set("webdav_base_url", value: newValue)
+        }
+        .onChange(of: settings.webDevUsername) { _, newValue in
+            let store = SecureStoreAdapter()
+            store.set("webdav_username", value: newValue)
+        }
+        .onChange(of: settings.webDevPassword) { _, newValue in
+            let store = SecureStoreAdapter()
+            store.set("webdav_password", value: newValue)
+        }
+        .onChange(of: settings.localServerEnabled) { _, newValue in
+            let store = SecureStoreAdapter()
+            store.set("local_server_enabled", value: newValue ? "1" : "0")
         }
         .alert(confirmDialogTitle, isPresented: $showConfirmDialog) {
             Button(L10n.get(settings.language, "cancel"), role: .cancel) { }

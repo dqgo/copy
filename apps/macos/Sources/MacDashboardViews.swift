@@ -120,13 +120,13 @@ struct MacStatusMenuView: View {
         localServerEnabled: false
     )
     @State private var status = StatusViewModel(
-        connectionState: .connected,
-        syncedOutCount: 12,
-        syncedInCount: 11,
-        rejectedEventCount: 1,
-        trustedDeviceCount: 3,
-        pendingPairingCount: 1,
-        lastErrorMessage: "Revoked device: old-ipad"
+        connectionState: .disconnected,
+        syncedOutCount: 0,
+        syncedInCount: 0,
+        rejectedEventCount: 0,
+        trustedDeviceCount: 0,
+        pendingPairingCount: 0,
+        lastErrorMessage: nil
     )
 
     var body: some View {
@@ -176,6 +176,27 @@ struct MacStatusMenuView: View {
             settings.webDevBaseUrl = store.get("webdav_base_url") ?? ""
             settings.webDevUsername = store.get("webdav_username") ?? ""
             settings.webDevPassword = store.get("webdav_password") ?? ""
+            settings.localServerEnabled = store.get("local_server_enabled") == "1"
+        }
+        .onChange(of: settings.webDevEnabled) { _, newValue in
+            let store = SecureStoreAdapter()
+            store.set("webdav_enabled", value: newValue ? "1" : "0")
+        }
+        .onChange(of: settings.webDevBaseUrl) { _, newValue in
+            let store = SecureStoreAdapter()
+            store.set("webdav_base_url", value: newValue)
+        }
+        .onChange(of: settings.webDevUsername) { _, newValue in
+            let store = SecureStoreAdapter()
+            store.set("webdav_username", value: newValue)
+        }
+        .onChange(of: settings.webDevPassword) { _, newValue in
+            let store = SecureStoreAdapter()
+            store.set("webdav_password", value: newValue)
+        }
+        .onChange(of: settings.localServerEnabled) { _, newValue in
+            let store = SecureStoreAdapter()
+            store.set("local_server_enabled", value: newValue ? "1" : "0")
         }
     }
 
@@ -317,11 +338,7 @@ struct MacStatusMenuView: View {
 }
 
 struct MacTrustedDevicesWindowView: View {
-    @State private var devices: [MacTrustedDevice] = [
-        MacTrustedDevice(id: "mac-office", name: "macOS Laptop", lastSeen: "just now"),
-        MacTrustedDevice(id: "win-local", name: "Windows Desktop", lastSeen: "6 min ago"),
-        MacTrustedDevice(id: "android-main", name: "Android Phone", lastSeen: "14 min ago")
-    ]
+    @State private var devices: [MacTrustedDevice] = []
     @State private var query = ""
     @State private var showConfirmDialog = false
     @State private var pendingDevice: MacTrustedDevice?
@@ -385,10 +402,7 @@ struct MacTrustedDevicesWindowView: View {
 }
 
 struct MacPairingRequestsWindowView: View {
-    @State private var requests: [PairingRequestItem] = [
-        PairingRequestItem(id: "req-mac-001", deviceName: "Pixel 9", platform: "android", at: "10:12"),
-        PairingRequestItem(id: "req-mac-002", deviceName: "iPad Air", platform: "ios", at: "10:14")
-    ]
+    @State private var requests: [PairingRequestItem] = []
     @State private var query = ""
     @State private var showConfirmDialog = false
     @State private var pendingReject: PairingRequestItem?
@@ -457,11 +471,7 @@ struct MacPairingRequestsWindowView: View {
 }
 
 struct MacHistoryWindowView: View {
-    private let history: [SyncHistoryItem] = [
-        SyncHistoryItem(direction: "in", contentType: "text/plain", summary: "Received clipboard from iPhone", time: "09:42"),
-        SyncHistoryItem(direction: "out", contentType: "text/plain", summary: "Manual sync to Windows", time: "09:30"),
-        SyncHistoryItem(direction: "event", contentType: "device", summary: "Rejected replay packet", time: "09:11")
-    ]
+    private let history: [SyncHistoryItem] = []
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
