@@ -1,0 +1,30 @@
+{
+  "validEnvelope": {
+    "protocolVersion": "1.0",
+    "messageId": "2f908045-d8b8-4938-b7c3-4c0d88046615",
+    "senderDeviceId": "win-dev-a1",
+    "workspaceIdHash": "c2d4f58f9a0134deaa0011bb22cc33dd",
+    "timestamp": "2026-03-25T00:00:00.000Z",
+    "sequence": 2,
+    "keyVersion": 1,
+    "contentType": "text/plain",
+    "encryptedPayload": "ZmFrZUNpcGhlcg==.bm9uY2U=.YXV0aFRhZw==",
+    "nonce": "bm9uY2U=",
+    "signature": "c2ln",
+    "clientVersion": "0.1.0"
+  },
+  "replayEnvelope": {
+    "protocolVersion": "1.0",
+    "messageId": "2f908045-d8b8-4938-b7c3-4c0d88046615",
+    "senderDeviceId": "win-dev-a1",
+    "workspaceIdHash": "c2d4f58f9a0134deaa0011bb22cc33dd",
+    "timestamp": "2026-03-25T00:00:00.000Z",
+    "sequence": 2,
+    "keyVersion": 1,
+    "contentType": "text/plain",
+    "encryptedPayload": "ZmFrZUNpcGhlcg==.bm9uY2U=.YXV0aFRhZw==",
+    "nonce": "bm9uY2U=",
+    "signature": "c2ln",
+    "clientVersion": "0.1.0"
+  }
+}

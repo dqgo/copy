@@ -1,0 +1,12 @@
+{
+  "name": "@clipboard-sync/app-core",
+  "version": "0.1.0",
+  "private": true,
+  "main": "dist/appCore.js",
+  "types": "dist/appCore.d.ts",
+  "scripts": {
+    "build": "node ../../packages/sync-simulator/node_modules/typescript/bin/tsc -p tsconfig.json",
+    "demo": "node dist/demo.js",
+    "test": "node dist/test.js"
+  }
+}

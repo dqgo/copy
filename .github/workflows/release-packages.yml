@@ -1,0 +1,115 @@
+name: Release Packages
+
+on:
+  workflow_dispatch:
+    inputs:
+      createReleaseBundle:
+        description: "Create release bundle artifacts"
+        required: false
+        default: "true"
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  validate:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: "packages/sync-simulator/package-lock.json"
+
+      - name: Validate
+        shell: pwsh
+        run: npm run ci:validate
+
+  package_windows:
+    needs: validate
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Build windows package
+        shell: pwsh
+        run: |
+          dotnet publish apps/windows -c Release -o artifacts/windows
+
+      - name: Upload windows artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-package
+          path: artifacts/windows/**
+          if-no-files-found: error
+
+  package_android:
+    needs: validate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Build android release
+        shell: bash
+        run: |
+          cd apps/android
+          gradle assembleRelease
+
+      - name: Upload android artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-apk
+          path: apps/android/app/build/outputs/apk/release/**/*.apk
+          if-no-files-found: error
+
+  package_apple:
+    needs: validate
+    runs-on: macos-latest
+    env:
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      APPLE_SIGN_IDENTITY: ${{ secrets.APPLE_SIGN_IDENTITY }}
+      APPLE_PROFILE_NAME: ${{ secrets.APPLE_PROFILE_NAME }}
+      IOS_BUNDLE_ID: ${{ secrets.IOS_BUNDLE_ID }}
+      MACOS_BUNDLE_ID: ${{ secrets.MACOS_BUNDLE_ID }}
+      IOS_SCHEME: ClipboardSynciOS
+      MACOS_SCHEME: ClipboardSyncMac
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build apple packages
+        shell: bash
+        run: |
+          chmod +x scripts/release/apple-build.sh
+          scripts/release/apple-build.sh
+
+      - name: Upload apple artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: apple-packages
+          path: |
+            artifacts/ios/**/*.ipa
+            artifacts/macos/**/*.app
+            artifacts/macos/**/*.pkg
+            artifacts/macos/**/*.dmg
+          if-no-files-found: warn

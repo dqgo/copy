@@ -1,0 +1,26 @@
+{
+  "name": "clipboard-sync-monorepo",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "bootstrap": "npm --prefix packages/sync-simulator ci",
+    "build": "npm run build:protocol && npm run build:crypto && npm run sim:build && npm run build:app && npm run build:server",
+    "build:protocol": "node packages/sync-simulator/node_modules/typescript/bin/tsc -p packages/protocol-spec/tsconfig.json",
+    "build:crypto": "node packages/sync-simulator/node_modules/typescript/bin/tsc -p packages/crypto-spec/tsconfig.json",
+    "sim:build": "node packages/sync-simulator/node_modules/typescript/bin/tsc -p packages/sync-simulator/tsconfig.json",
+    "build:app": "node packages/sync-simulator/node_modules/typescript/bin/tsc -p packages/app-core/tsconfig.json",
+    "build:server": "node packages/sync-simulator/node_modules/typescript/bin/tsc -p packages/custom-sync-server/tsconfig.json",
+    "build:windows": "powershell -Command \"if (Get-Command dotnet -ErrorAction SilentlyContinue) { $s=dotnet --list-sdks; if ([string]::IsNullOrWhiteSpace(($s | Out-String))) { Write-Output 'dotnet-sdk-missing' } else { dotnet publish apps/windows -c Release -o artifacts/windows } } else { Write-Output 'dotnet-sdk-missing' }\"",
+    "build:android": "powershell -Command \"if (Get-Command gradle -ErrorAction SilentlyContinue) { Push-Location apps/android; gradle assembleRelease; Pop-Location } else { Write-Output 'gradle-missing' }\"",
+    "sim:demo": "node packages/sync-simulator/dist/demo.js",
+    "sim:test": "node packages/sync-simulator/dist/test.js",
+    "sim:test:network": "node packages/sync-simulator/dist/networkTest.js",
+    "app:demo": "node packages/app-core/dist/demo.js",
+    "app:test": "node packages/app-core/dist/test.js",
+    "server:start": "node packages/custom-sync-server/dist/server.js",
+    "release:all": "powershell -ExecutionPolicy Bypass -File scripts/release/build-all.ps1",
+    "release:all:cloud": "powershell -ExecutionPolicy Bypass -File scripts/release/build-all.ps1 -TriggerCloud",
+    "ci:validate": "npm run bootstrap && npm run build && npm run validate:protocol && npm run sim:test && npm run sim:test:network && npm run app:test",
+    "validate:protocol": "node packages/protocol-spec/dist/validate.js"
+  }
+}

@@ -1,0 +1,1 @@
+MVP implementation starts in next step: Windows native adapter and status shell.

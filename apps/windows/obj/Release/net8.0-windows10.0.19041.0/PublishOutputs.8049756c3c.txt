@@ -1,0 +1,7 @@
+C:\Users\14260\OneDrive\文档\document\copy\artifacts\windows\ClipboardSync.Windows.exe
+C:\Users\14260\OneDrive\文档\document\copy\artifacts\windows\ClipboardSync.Windows.dll
+C:\Users\14260\OneDrive\文档\document\copy\artifacts\windows\ClipboardSync.Windows.deps.json
+C:\Users\14260\OneDrive\文档\document\copy\artifacts\windows\ClipboardSync.Windows.runtimeconfig.json
+C:\Users\14260\OneDrive\文档\document\copy\artifacts\windows\ClipboardSync.Windows.pdb
+C:\Users\14260\OneDrive\文档\document\copy\artifacts\windows\Microsoft.Windows.SDK.NET.dll
+C:\Users\14260\OneDrive\文档\document\copy\artifacts\windows\WinRT.Runtime.dll

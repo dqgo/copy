@@ -1,0 +1,20 @@
+{
+  "name": "@clipboard-sync/sync-simulator",
+  "version": "0.1.0",
+  "private": true,
+  "main": "dist/engine.js",
+  "types": "dist/engine.d.ts",
+  "scripts": {
+    "build": "node node_modules/typescript/bin/tsc -p tsconfig.json",
+    "demo": "node dist/demo.js",
+    "test": "node dist/test.js",
+    "test:network": "node dist/networkTest.js"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.10",
+    "typescript": "^5.8.2"
+  },
+  "dependencies": {
+    "mqtt": "^5.10.4"
+  }
+}

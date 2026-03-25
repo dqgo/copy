@@ -1,0 +1,4 @@
+C:\Users\14260\OneDrive\文档\document\copy\apps\android\app\src\main\java\com\clipboardsync\QuickActionReceiver.kt
+C:\Users\14260\OneDrive\文档\document\copy\apps\android\app\src\main\java\com\clipboardsync\StatusViewModel.kt
+C:\Users\14260\OneDrive\文档\document\copy\apps\android\app\src\main\java\com\clipboardsync\MainActivity.kt
+C:\Users\14260\OneDrive\文档\document\copy\apps\android\app\src\main\java\com\clipboardsync\SyncQuickActionService.kt

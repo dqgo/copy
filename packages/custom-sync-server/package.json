@@ -1,0 +1,11 @@
+{
+  "name": "@clipboard-sync/custom-sync-server",
+  "version": "0.1.0",
+  "private": true,
+  "main": "dist/server.js",
+  "types": "dist/server.d.ts",
+  "scripts": {
+    "build": "node ../sync-simulator/node_modules/typescript/bin/tsc -p tsconfig.json",
+    "start": "node dist/server.js"
+  }
+}

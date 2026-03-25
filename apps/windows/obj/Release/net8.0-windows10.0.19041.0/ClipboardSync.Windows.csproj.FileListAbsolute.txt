@@ -1,0 +1,17 @@
+C:\Users\14260\OneDrive\文档\document\copy\apps\windows\bin\Release\net8.0-windows10.0.19041.0\ClipboardSync.Windows.exe
+C:\Users\14260\OneDrive\文档\document\copy\apps\windows\bin\Release\net8.0-windows10.0.19041.0\ClipboardSync.Windows.deps.json
+C:\Users\14260\OneDrive\文档\document\copy\apps\windows\bin\Release\net8.0-windows10.0.19041.0\ClipboardSync.Windows.runtimeconfig.json
+C:\Users\14260\OneDrive\文档\document\copy\apps\windows\bin\Release\net8.0-windows10.0.19041.0\ClipboardSync.Windows.dll
+C:\Users\14260\OneDrive\文档\document\copy\apps\windows\bin\Release\net8.0-windows10.0.19041.0\ClipboardSync.Windows.pdb
+C:\Users\14260\OneDrive\文档\document\copy\apps\windows\bin\Release\net8.0-windows10.0.19041.0\Microsoft.Windows.SDK.NET.dll
+C:\Users\14260\OneDrive\文档\document\copy\apps\windows\bin\Release\net8.0-windows10.0.19041.0\WinRT.Runtime.dll
+C:\Users\14260\OneDrive\文档\document\copy\apps\windows\obj\Release\net8.0-windows10.0.19041.0\ClipboardSync.Windows.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\14260\OneDrive\文档\document\copy\apps\windows\obj\Release\net8.0-windows10.0.19041.0\ClipboardSync.Windows.AssemblyInfoInputs.cache
+C:\Users\14260\OneDrive\文档\document\copy\apps\windows\obj\Release\net8.0-windows10.0.19041.0\ClipboardSync.Windows.AssemblyInfo.cs
+C:\Users\14260\OneDrive\文档\document\copy\apps\windows\obj\Release\net8.0-windows10.0.19041.0\ClipboardSync.Windows.csproj.CoreCompileInputs.cache
+C:\Users\14260\OneDrive\文档\document\copy\apps\windows\obj\Release\net8.0-windows10.0.19041.0\Clipboar.B90FDA88.Up2Date
+C:\Users\14260\OneDrive\文档\document\copy\apps\windows\obj\Release\net8.0-windows10.0.19041.0\ClipboardSync.Windows.dll
+C:\Users\14260\OneDrive\文档\document\copy\apps\windows\obj\Release\net8.0-windows10.0.19041.0\refint\ClipboardSync.Windows.dll
+C:\Users\14260\OneDrive\文档\document\copy\apps\windows\obj\Release\net8.0-windows10.0.19041.0\ClipboardSync.Windows.pdb
+C:\Users\14260\OneDrive\文档\document\copy\apps\windows\obj\Release\net8.0-windows10.0.19041.0\ClipboardSync.Windows.genruntimeconfig.cache
+C:\Users\14260\OneDrive\文档\document\copy\apps\windows\obj\Release\net8.0-windows10.0.19041.0\ref\ClipboardSync.Windows.dll
