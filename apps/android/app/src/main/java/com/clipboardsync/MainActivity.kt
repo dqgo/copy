@@ -5,6 +5,12 @@ import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -17,6 +23,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -25,6 +32,7 @@ import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Divider
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Tab
@@ -38,20 +46,15 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideOutHorizontally
-import androidx.compose.animation.togetherWith
 
-// i18n translations
 object AppStrings {
     private val translations = mapOf(
         "zh-CN" to mapOf(
@@ -76,24 +79,23 @@ object AppStrings {
             "pairingPolicy" to "配对策略",
             "webdev" to "WebDev 同步",
             "server" to "本地服务模式",
-            "justNow" to "刚刚",
-            "minAgo" to "分钟前",
-            "hoursAgo" to "小时前",
-            "daysAgo" to "天前",
-            "manual" to "手动",
-            "auto" to "自动",
-            "default" to "默认",
-            "work" to "工作",
-            "lab" to "实验室",
-            "manualApprove" to "手动批准",
-            "autoApproveInvite" to "邀请自动批准",
+            "manualSync" to "手动同步",
+            "sendHtml" to "发送 HTML",
+            "sendImage" to "发送图片",
+            "sendFile" to "发送文件",
+            "lastError" to "最近错误",
             "noDevices" to "暂无设备",
             "noPairingRequests" to "暂无配对请求",
             "noHistory" to "暂无历史记录",
-            "confirmRevoke" to "确认撤销此设备吗？",
-            "confirmReject" to "确认拒绝此请求吗？",
             "confirm" to "确认",
-            "cancel" to "取消"
+            "cancel" to "取消",
+            "searchDevices" to "搜索设备",
+            "searchHistory" to "搜索历史",
+            "searchPairing" to "搜索配对请求",
+            "clearFilter" to "清空筛选",
+            "emptyDevicesHint" to "当前没有可信设备，可前往配对页添加设备",
+            "emptyPairingHint" to "当前没有配对请求，等待新设备发起即可",
+            "emptyHistoryHint" to "还没有同步记录，执行一次手动同步即可生成历史"
         ),
         "en-US" to mapOf(
             "status" to "Status",
@@ -117,24 +119,23 @@ object AppStrings {
             "pairingPolicy" to "Pairing Policy",
             "webdev" to "WebDev Sync",
             "server" to "Local Server Mode",
-            "justNow" to "just now",
-            "minAgo" to "min ago",
-            "hoursAgo" to "hours ago",
-            "daysAgo" to "days ago",
-            "manual" to "Manual",
-            "auto" to "Auto",
-            "default" to "Default",
-            "work" to "Work",
-            "lab" to "Lab",
-            "manualApprove" to "Manual Approve",
-            "autoApproveInvite" to "Auto-Approve Invite",
+            "manualSync" to "Manual Sync",
+            "sendHtml" to "Send HTML",
+            "sendImage" to "Send Image",
+            "sendFile" to "Send File",
+            "lastError" to "Last Error",
             "noDevices" to "No devices",
             "noPairingRequests" to "No pairing requests",
             "noHistory" to "No history",
-            "confirmRevoke" to "Confirm revoking this device?",
-            "confirmReject" to "Confirm rejecting this request?"
             "confirm" to "Confirm",
-            "cancel" to "Cancel"
+            "cancel" to "Cancel",
+            "searchDevices" to "Search devices",
+            "searchHistory" to "Search history",
+            "searchPairing" to "Search pairing requests",
+            "clearFilter" to "Clear filter",
+            "emptyDevicesHint" to "No trusted devices yet. Add one from pairing tab.",
+            "emptyPairingHint" to "No pairing requests for now.",
+            "emptyHistoryHint" to "No sync history yet. Run manual sync to create records."
         )
     )
 
@@ -143,19 +144,8 @@ object AppStrings {
     }
 }
 
-data class TrustedDeviceUi(
-    val deviceId: String,
-    val displayName: String,
-    val lastSeen: String
-)
-
-data class HistoryUi(
-    val direction: String,
-    val contentType: String,
-    val preview: String,
-    val at: String
-)
-
+data class TrustedDeviceUi(val deviceId: String, val displayName: String, val lastSeen: String)
+data class HistoryUi(val direction: String, val contentType: String, val preview: String, val at: String)
 data class SettingsUi(
     val language: String,
     val darkMode: Boolean,
@@ -165,13 +155,7 @@ data class SettingsUi(
     val localServerEnabled: Boolean,
     val pairingPolicy: String
 )
-
-data class PairingRequestUi(
-    val requestId: String,
-    val displayName: String,
-    val platform: String,
-    val at: String
-)
+data class PairingRequestUi(val requestId: String, val displayName: String, val platform: String, val at: String)
 
 data class DashboardState(
     val status: StatusViewModel,
@@ -179,7 +163,6 @@ data class DashboardState(
     val history: List<HistoryUi>,
     val settings: SettingsUi,
     val pairingRequests: List<PairingRequestUi>,
-    val isLoading: Boolean = false,
     val errorMessage: String? = null,
     val showConfirmDialog: Boolean = false,
     val confirmDialogTitle: String = "",
@@ -196,18 +179,19 @@ class MainActivity : ComponentActivity() {
         } else {
             startService(quickServiceIntent)
         }
-        setContent {
-            ClipboardSyncAndroidApp()
-        }
+        setContent { ClipboardSyncAndroidApp() }
     }
 }
 
-@Composable
 @OptIn(ExperimentalMaterial3Api::class)
+@Composable
 private fun ClipboardSyncAndroidApp() {
     val systemDarkTheme = isSystemInDarkTheme()
-    
     var selectedTab by remember { mutableStateOf(0) }
+    var deviceQuery by remember { mutableStateOf("") }
+    var historyQuery by remember { mutableStateOf("") }
+    var pairingQuery by remember { mutableStateOf("") }
+
     var state by remember {
         mutableStateOf(
             DashboardState(
@@ -238,27 +222,32 @@ private fun ClipboardSyncAndroidApp() {
                     localServerEnabled = false,
                     pairingPolicy = "manual-approve"
                 ),
-                pairingRequests = listOf(
-                    PairingRequestUi("req-and-001", "iPad Air", "ios", "10:22")
-                )
+                pairingRequests = listOf(PairingRequestUi("req-and-001", "iPad Air", "ios", "10:22"))
             )
         )
+    }
+
+    val filteredDevices = state.devices.filter {
+        val q = deviceQuery.trim().lowercase()
+        q.isEmpty() || it.displayName.lowercase().contains(q) || it.deviceId.lowercase().contains(q)
+    }
+    val filteredHistory = state.history.filter {
+        val q = historyQuery.trim().lowercase()
+        q.isEmpty() || it.preview.lowercase().contains(q) || it.contentType.lowercase().contains(q)
+    }
+    val filteredPairing = state.pairingRequests.filter {
+        val q = pairingQuery.trim().lowercase()
+        q.isEmpty() || it.displayName.lowercase().contains(q) || it.platform.lowercase().contains(q)
     }
 
     MaterialTheme {
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(
-                    Brush.verticalGradient(
-                        colors = listOf(Color(0xFF0A355A), Color(0xFF0C5D56), Color(0xFF0B2233))
-                    )
-                )
+                .background(Brush.verticalGradient(colors = listOf(Color(0xFF0A355A), Color(0xFF0C5D56), Color(0xFF0B2233))))
         ) {
             Scaffold(
-                topBar = {
-                    TopAppBar(title = { Text("Clipboard Sync") })
-                },
+                topBar = { TopAppBar(title = { Text("Clipboard Sync") }) },
                 containerColor = Color.Transparent
             ) { padding ->
                 Column(
@@ -267,30 +256,25 @@ private fun ClipboardSyncAndroidApp() {
                         .padding(padding)
                         .padding(14.dp)
                 ) {
-                    // Error message display
-                    if (state.errorMessage != null) {
+                    state.errorMessage?.let { msg ->
                         Card(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(bottom = 12.dp),
+                            modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
                             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)
                         ) {
                             Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(12.dp),
+                                modifier = Modifier.fillMaxWidth().padding(12.dp),
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text(state.errorMessage!!, color = MaterialTheme.colorScheme.onErrorContainer)
+                                Text(msg, color = MaterialTheme.colorScheme.onErrorContainer)
                                 Button(
-                                    onClick = { state = state.copy(errorMessage = null) },
-                                    modifier = Modifier.height(32.dp)
+                                    modifier = Modifier.semantics { contentDescription = "Dismiss error message" },
+                                    onClick = { state = state.copy(errorMessage = null) }
                                 ) { Text("×") }
                             }
                         }
                     }
-                    
+
                     TabRow(selectedTabIndex = selectedTab) {
                         Tab(selected = selectedTab == 0, onClick = { selectedTab = 0 }, text = { Text(AppStrings.get(state.settings.language, "status")) })
                         Tab(selected = selectedTab == 1, onClick = { selectedTab = 1 }, text = { Text(AppStrings.get(state.settings.language, "devices")) })
@@ -300,138 +284,142 @@ private fun ClipboardSyncAndroidApp() {
                     }
                     Spacer(modifier = Modifier.height(12.dp))
 
-                    when (selectedTab) {
-                        0 -> StatusTab(
-                            status = state.status,
-                            language = state.settings.language,
-                            onManualSync = {
-                                state = state.copy(
-                                    status = state.status.copy(
-                                        syncedOutCount = state.status.syncedOutCount + 1,
-                                        syncedInCount = state.status.syncedInCount + 1,
-                                        lastErrorMessage = "None"
-                                    ),
-                                    history = listOf(
-                                        HistoryUi("out", "text/plain", "manual sync", "now")
-                                    ) + state.history
-                                )
-                            },
-                            onSendHtml = {
-
-                                                    AnimatedContent(targetState = selectedTab,
-                                                        transitionSpec = {
-                                                            (slideInHorizontally(initialOffsetX = { 300 }) + fadeIn()).togetherWith(
-                                                                slideOutHorizontally(targetOffsetX = { -300 }) + fadeOut()
-                                                            )
-                                                        }) { tab ->
-                                                    when (tab) {
-                                state = state.copy(
-                                    status = state.status.copy(syncedOutCount = state.status.syncedOutCount + 1),
-                                    history = listOf(
-                                        HistoryUi("out", "text/html", "<b>Clipboard Sync</b>", "now")
-                                    ) + state.history
-                                )
-                            },
-                            onSendImage = {
-                                state = state.copy(
-                                    status = state.status.copy(syncedOutCount = state.status.syncedOutCount + 1),
-                                    history = listOf(
-                                        HistoryUi("out", "image/png", "screenshot.png (ref)", "now")
-                                    ) + state.history
-                                )
-                            },
-                            onSendFileRef = {
-                                state = state.copy(
-                                    status = state.status.copy(syncedOutCount = state.status.syncedOutCount + 1),
-                                    history = listOf(
-                                        HistoryUi("out", "application/x-clipboard-file-ref", "C:/tmp/demo.txt", "now")
-                                    ) + state.history
-                                )
-                            }
-                        )
-
-                        1 -> DevicesTab(state.devices, state.settings.language) { deviceId ->
-                                val deviceName = state.devices.find { it.deviceId == deviceId }?.displayName ?: deviceId
-                                state = state.copy(
-                                    showConfirmDialog = true,
-                                    confirmDialogTitle = AppStrings.get(state.settings.language, "revoke"),
-                                    confirmDialogMessage = "Are you sure you want to revoke $deviceName?",
-                                    confirmDialogOnConfirm = {
-                                        state = state.copy(
-                                            devices = state.devices.filterNot { it.deviceId == deviceId },
-                                            status = state.status.copy(
-                                                rejectedEventCount = state.status.rejectedEventCount + 1,
-                                                trustedDeviceCount = (state.status.trustedDeviceCount - 1).coerceAtLeast(0),
-                                                lastErrorMessage = "Revoked device: $deviceId"
-                                            ),
-                                            history = listOf(
-                                                HistoryUi("event", "device", "revoked $deviceId", "now")
-                                            ) + state.history
-                                        )
-                                    }
-                                )
-                        }
-
-                        2 -> PairingTab(state.pairingRequests, state.settings.language, onApprove = { requestId ->
-                            val request = state.pairingRequests.find { it.requestId == requestId }
-                            state = state.copy(
-                                pairingRequests = state.pairingRequests.filterNot { it.requestId == requestId },
-                                status = state.status.copy(
-                                    trustedDeviceCount = state.status.trustedDeviceCount + 1,
-                                    pendingPairingCount = (state.status.pendingPairingCount - 1).coerceAtLeast(0)
-                                ),
-                                history = if (request == null) state.history else listOf(
-                                    HistoryUi("event", "pairing", "approved ${request.displayName}", "now")
-                                ) + state.history
+                    AnimatedContent(
+                        targetState = selectedTab,
+                        transitionSpec = {
+                            (slideInHorizontally(initialOffsetX = { 300 }) + fadeIn()).togetherWith(
+                                slideOutHorizontally(targetOffsetX = { -300 }) + fadeOut()
                             )
-                        }, onReject = { requestId ->
-                            val request = state.pairingRequests.find { it.requestId == requestId }
-                                state = state.copy(
-                                    showConfirmDialog = true,
-                                    confirmDialogTitle = AppStrings.get(state.settings.language, "reject"),
-                                    confirmDialogMessage = "Are you sure you want to reject ${request?.displayName}?",
-                                    confirmDialogOnConfirm = {
-                                        state = state.copy(
-                                            pairingRequests = state.pairingRequests.filterNot { it.requestId == requestId },
-                                            status = state.status.copy(
-                                                pendingPairingCount = (state.status.pendingPairingCount - 1).coerceAtLeast(0)
-                                            ),
-                                            history = if (request == null) state.history else listOf(
-                                                HistoryUi("event", "pairing", "rejected ${request.displayName}", "now")
-                                            ) + state.history
-                                        )
-                                    }
-                                )
-                        })
-
-                        3 -> HistoryTab(state.history, state.settings.language)
-                        else -> SettingsTab(state.settings, state.settings.language) { updated -> state = state.copy(settings = updated) }
-                    }
                         }
-                    
+                    ) { tab ->
+                        when (tab) {
+                            0 -> StatusTab(
+                                status = state.status,
+                                language = state.settings.language,
+                                onManualSync = {
+                                    state = state.copy(
+                                        status = state.status.copy(
+                                            syncedOutCount = state.status.syncedOutCount + 1,
+                                            syncedInCount = state.status.syncedInCount + 1,
+                                            lastErrorMessage = "None"
+                                        ),
+                                        history = listOf(HistoryUi("out", "text/plain", "manual sync", "now")) + state.history
+                                    )
+                                },
+                                onSendHtml = {
+                                    state = state.copy(
+                                        status = state.status.copy(syncedOutCount = state.status.syncedOutCount + 1),
+                                        history = listOf(HistoryUi("out", "text/html", "<b>Clipboard Sync</b>", "now")) + state.history
+                                    )
+                                },
+                                onSendImage = {
+                                    state = state.copy(
+                                        status = state.status.copy(syncedOutCount = state.status.syncedOutCount + 1),
+                                        history = listOf(HistoryUi("out", "image/png", "screenshot.png (ref)", "now")) + state.history
+                                    )
+                                },
+                                onSendFileRef = {
+                                    state = state.copy(
+                                        status = state.status.copy(syncedOutCount = state.status.syncedOutCount + 1),
+                                        history = listOf(HistoryUi("out", "application/x-clipboard-file-ref", "C:/tmp/demo.txt", "now")) + state.history
+                                    )
+                                }
+                            )
+
+                            1 -> DevicesTab(
+                                devices = filteredDevices,
+                                language = state.settings.language,
+                                query = deviceQuery,
+                                onQueryChange = { deviceQuery = it },
+                                onRevoke = { deviceId ->
+                                    val deviceName = state.devices.find { it.deviceId == deviceId }?.displayName ?: deviceId
+                                    state = state.copy(
+                                        showConfirmDialog = true,
+                                        confirmDialogTitle = AppStrings.get(state.settings.language, "revoke"),
+                                        confirmDialogMessage = "Revoke $deviceName?",
+                                        confirmDialogOnConfirm = {
+                                            state = state.copy(
+                                                devices = state.devices.filterNot { it.deviceId == deviceId },
+                                                status = state.status.copy(
+                                                    rejectedEventCount = state.status.rejectedEventCount + 1,
+                                                    trustedDeviceCount = (state.status.trustedDeviceCount - 1).coerceAtLeast(0),
+                                                    lastErrorMessage = "Revoked device: $deviceId"
+                                                )
+                                            )
+                                        }
+                                    )
+                                }
+                            )
+
+                            2 -> PairingTab(
+                                requests = filteredPairing,
+                                language = state.settings.language,
+                                query = pairingQuery,
+                                onQueryChange = { pairingQuery = it },
+                                onApprove = { requestId ->
+                                    val request = state.pairingRequests.find { it.requestId == requestId }
+                                    state = state.copy(
+                                        pairingRequests = state.pairingRequests.filterNot { it.requestId == requestId },
+                                        status = state.status.copy(
+                                            trustedDeviceCount = state.status.trustedDeviceCount + 1,
+                                            pendingPairingCount = (state.status.pendingPairingCount - 1).coerceAtLeast(0)
+                                        ),
+                                        history = if (request == null) state.history else listOf(
+                                            HistoryUi("event", "pairing", "approved ${request.displayName}", "now")
+                                        ) + state.history
+                                    )
+                                },
+                                onReject = { requestId ->
+                                    val request = state.pairingRequests.find { it.requestId == requestId }
+                                    state = state.copy(
+                                        showConfirmDialog = true,
+                                        confirmDialogTitle = AppStrings.get(state.settings.language, "reject"),
+                                        confirmDialogMessage = "Reject ${request?.displayName ?: requestId}?",
+                                        confirmDialogOnConfirm = {
+                                            state = state.copy(
+                                                pairingRequests = state.pairingRequests.filterNot { it.requestId == requestId },
+                                                status = state.status.copy(
+                                                    pendingPairingCount = (state.status.pendingPairingCount - 1).coerceAtLeast(0)
+                                                )
+                                            )
+                                        }
+                                    )
+                                }
+                            )
+
+                            3 -> HistoryTab(
+                                history = filteredHistory,
+                                language = state.settings.language,
+                                query = historyQuery,
+                                onQueryChange = { historyQuery = it }
+                            )
+
+                            else -> SettingsTab(state.settings, state.settings.language) { updated ->
+                                state = state.copy(settings = updated)
+                            }
+                        }
+                    }
+                }
             }
 
-                // Confirmation Dialog
-                if (state.showConfirmDialog) {
-                    AlertDialog(
-                        onDismissRequest = { state = state.copy(showConfirmDialog = false) },
-                        title = { Text(state.confirmDialogTitle) },
-                        text = { Text(state.confirmDialogMessage) },
-                        confirmButton = {
-                            Button(onClick = {
-                                state.confirmDialogOnConfirm?.invoke()
-                                state = state.copy(showConfirmDialog = false)
-                            }) {
-                                Text(AppStrings.get(state.settings.language, "confirm") ?: "Confirm")
-                            }
-                        },
-                        dismissButton = {
-                            Button(onClick = { state = state.copy(showConfirmDialog = false) }) {
-                                Text(AppStrings.get(state.settings.language, "cancel") ?: "Cancel")
-                            }
+            if (state.showConfirmDialog) {
+                AlertDialog(
+                    onDismissRequest = { state = state.copy(showConfirmDialog = false) },
+                    title = { Text(state.confirmDialogTitle) },
+                    text = { Text(state.confirmDialogMessage) },
+                    confirmButton = {
+                        Button(onClick = {
+                            state.confirmDialogOnConfirm?.invoke()
+                            state = state.copy(showConfirmDialog = false)
+                        }) { Text(AppStrings.get(state.settings.language, "confirm")) }
+                    },
+                    dismissButton = {
+                        Button(onClick = { state = state.copy(showConfirmDialog = false) }) {
+                            Text(AppStrings.get(state.settings.language, "cancel"))
                         }
-                    )
-                }
+                    }
+                )
+            }
         }
     }
 }
@@ -445,10 +433,7 @@ private fun StatusTab(
     onSendImage: () -> Unit,
     onSendFileRef: () -> Unit
 ) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f))
-    ) {
+    Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f))) {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             StatusRow(AppStrings.get(language, "connection"), status.connectionState.name)
             StatusRow(AppStrings.get(language, "sent"), status.syncedOutCount.toString())
@@ -456,23 +441,55 @@ private fun StatusTab(
             StatusRow(AppStrings.get(language, "rejected"), status.rejectedEventCount.toString())
             StatusRow(AppStrings.get(language, "trustedCount"), status.trustedDeviceCount.toString())
             StatusRow(AppStrings.get(language, "pendingPairing"), status.pendingPairingCount.toString())
-            StatusRow("Last Error", status.lastErrorMessage ?: "None")
+            StatusRow(AppStrings.get(language, "lastError"), status.lastErrorMessage ?: "None")
             Divider()
-            Button(onClick = onManualSync) { Text(AppStrings.get(language, "manualSync")) }
+            Button(modifier = Modifier.semantics { contentDescription = "Manual sync action" }, onClick = onManualSync) {
+                Text(AppStrings.get(language, "manualSync"))
+            }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = onSendHtml) { Text(AppStrings.get(language, "sendHtml")) }
-                Button(onClick = onSendImage) { Text(AppStrings.get(language, "sendImage")) }
-                Button(onClick = onSendFileRef) { Text(AppStrings.get(language, "sendFile")) }
+                Button(modifier = Modifier.semantics { contentDescription = "Send HTML content" }, onClick = onSendHtml) {
+                    Text(AppStrings.get(language, "sendHtml"))
+                }
+                Button(modifier = Modifier.semantics { contentDescription = "Send image reference" }, onClick = onSendImage) {
+                    Text(AppStrings.get(language, "sendImage"))
+                }
+                Button(modifier = Modifier.semantics { contentDescription = "Send file reference" }, onClick = onSendFileRef) {
+                    Text(AppStrings.get(language, "sendFile"))
+                }
             }
         }
     }
 }
 
 @Composable
-private fun DevicesTab(devices: List<TrustedDeviceUi>, language: String, onRevoke: (String) -> Unit) {
+private fun DevicesTab(
+    devices: List<TrustedDeviceUi>,
+    language: String,
+    query: String,
+    onQueryChange: (String) -> Unit,
+    onRevoke: (String) -> Unit
+) {
     LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        item {
+            OutlinedTextField(
+                value = query,
+                onValueChange = onQueryChange,
+                label = { Text(AppStrings.get(language, "searchDevices")) },
+                modifier = Modifier.fillMaxWidth().semantics { contentDescription = "Device search input" }
+            )
+        }
+        if (devices.isEmpty()) {
+            item {
+                EmptyStateCard(
+                    title = AppStrings.get(language, "noDevices"),
+                    message = AppStrings.get(language, "emptyDevicesHint"),
+                    actionLabel = if (query.isNotBlank()) AppStrings.get(language, "clearFilter") else null,
+                    onAction = if (query.isNotBlank()) ({ onQueryChange("") }) else null
+                )
+            }
+        }
         items(devices, key = { it.deviceId }) { device ->
-            Card(modifier = Modifier.fillMaxWidth()) {
+            Card(modifier = Modifier.fillMaxWidth().semantics { contentDescription = "Device ${device.displayName}" }) {
                 Column(modifier = Modifier.padding(14.dp)) {
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                         Text(device.displayName, fontWeight = FontWeight.Bold)
@@ -480,9 +497,10 @@ private fun DevicesTab(devices: List<TrustedDeviceUi>, language: String, onRevok
                     }
                     Text("ID: ${device.deviceId}")
                     Text("${AppStrings.get(language, "lastError")}: ${device.lastSeen}")
-                    Button(onClick = { onRevoke(device.deviceId) }) {
-                        Text(AppStrings.get(language, "revoke"))
-                    }
+                    Button(
+                        modifier = Modifier.semantics { contentDescription = "Revoke ${device.displayName}" },
+                        onClick = { onRevoke(device.deviceId) }
+                    ) { Text(AppStrings.get(language, "revoke")) }
                 }
             }
         }
@@ -490,13 +508,31 @@ private fun DevicesTab(devices: List<TrustedDeviceUi>, language: String, onRevok
 }
 
 @Composable
-private fun PairingTab(requests: List<PairingRequestUi>, language: String, onApprove: (String) -> Unit, onReject: (String) -> Unit) {
+private fun PairingTab(
+    requests: List<PairingRequestUi>,
+    language: String,
+    query: String,
+    onQueryChange: (String) -> Unit,
+    onApprove: (String) -> Unit,
+    onReject: (String) -> Unit
+) {
     LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        item {
+            OutlinedTextField(
+                value = query,
+                onValueChange = onQueryChange,
+                label = { Text(AppStrings.get(language, "searchPairing")) },
+                modifier = Modifier.fillMaxWidth().semantics { contentDescription = "Pairing request search input" }
+            )
+        }
         if (requests.isEmpty()) {
             item {
-                Card(modifier = Modifier.fillMaxWidth()) {
-                    Text(AppStrings.get(language, "noPairingRequests"), modifier = Modifier.padding(16.dp))
-                }
+                EmptyStateCard(
+                    title = AppStrings.get(language, "noPairingRequests"),
+                    message = AppStrings.get(language, "emptyPairingHint"),
+                    actionLabel = if (query.isNotBlank()) AppStrings.get(language, "clearFilter") else null,
+                    onAction = if (query.isNotBlank()) ({ onQueryChange("") }) else null
+                )
             }
         }
         items(requests, key = { it.requestId }) { req ->
@@ -506,8 +542,14 @@ private fun PairingTab(requests: List<PairingRequestUi>, language: String, onApp
                     Text("${AppStrings.get(language, "status")}: ${req.platform}")
                     Text("${AppStrings.get(language, "lastError")}: ${req.at}")
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Button(onClick = { onApprove(req.requestId) }) { Text(AppStrings.get(language, "approve")) }
-                        Button(onClick = { onReject(req.requestId) }) { Text(AppStrings.get(language, "reject")) }
+                        Button(
+                            modifier = Modifier.semantics { contentDescription = "Approve ${req.displayName}" },
+                            onClick = { onApprove(req.requestId) }
+                        ) { Text(AppStrings.get(language, "approve")) }
+                        Button(
+                            modifier = Modifier.semantics { contentDescription = "Reject ${req.displayName}" },
+                            onClick = { onReject(req.requestId) }
+                        ) { Text(AppStrings.get(language, "reject")) }
                     }
                 }
             }
@@ -516,13 +558,24 @@ private fun PairingTab(requests: List<PairingRequestUi>, language: String, onApp
 }
 
 @Composable
-private fun HistoryTab(history: List<HistoryUi>, language: String) {
+private fun HistoryTab(history: List<HistoryUi>, language: String, query: String, onQueryChange: (String) -> Unit) {
     LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        item {
+            OutlinedTextField(
+                value = query,
+                onValueChange = onQueryChange,
+                label = { Text(AppStrings.get(language, "searchHistory")) },
+                modifier = Modifier.fillMaxWidth().semantics { contentDescription = "History search input" }
+            )
+        }
         if (history.isEmpty()) {
             item {
-                Card(modifier = Modifier.fillMaxWidth()) {
-                    Text(AppStrings.get(language, "noHistory"), modifier = Modifier.padding(16.dp))
-                }
+                EmptyStateCard(
+                    title = AppStrings.get(language, "noHistory"),
+                    message = AppStrings.get(language, "emptyHistoryHint"),
+                    actionLabel = if (query.isNotBlank()) AppStrings.get(language, "clearFilter") else null,
+                    onAction = if (query.isNotBlank()) ({ onQueryChange("") }) else null
+                )
             }
         }
         items(history) { item ->
@@ -569,6 +622,19 @@ private fun StatusRow(label: String, value: String) {
     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
         Text(label, fontWeight = FontWeight.SemiBold)
         Text(value)
+    }
+}
+
+@Composable
+private fun EmptyStateCard(title: String, message: String, actionLabel: String? = null, onAction: (() -> Unit)? = null) {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(title, fontWeight = FontWeight.Bold)
+            Text(message, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (actionLabel != null && onAction != null) {
+                Button(onClick = onAction) { Text(actionLabel) }
+            }
+        }
     }
 }
 

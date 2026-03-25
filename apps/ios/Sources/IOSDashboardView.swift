@@ -1,6 +1,5 @@
 import SwiftUI
 
-// i18n translations
 struct L10n {
     static let translations: [String: [String: String]] = [
         "zh-CN": [
@@ -30,8 +29,15 @@ struct L10n {
             "noPairingRequests": "暂无配对请求",
             "noHistory": "暂无历史记录",
             "lastError": "最近错误",
-            "confirmRevoke": "确认撤销此设备吗？",
-            "confirmReject": "确认拒绝此请求吗?"
+            "confirm": "确认",
+            "cancel": "取消",
+            "searchDevices": "搜索设备",
+            "searchHistory": "搜索历史",
+            "searchPairing": "搜索配对请求",
+            "clearFilter": "清空筛选",
+            "emptyDevicesHint": "暂无可信设备，可前往配对页添加",
+            "emptyPairingHint": "暂无配对请求，等待新设备发起即可",
+            "emptyHistoryHint": "暂无同步历史，执行一次手动同步即可"
         ],
         "en-US": [
             "status": "Status",
@@ -60,13 +66,20 @@ struct L10n {
             "noPairingRequests": "No pairing requests",
             "noHistory": "No history",
             "lastError": "Last Error",
-            "confirmRevoke": "Confirm revoking this device?",
-            "confirmReject": "Confirm rejecting this request?"
+            "confirm": "Confirm",
+            "cancel": "Cancel",
+            "searchDevices": "Search devices",
+            "searchHistory": "Search history",
+            "searchPairing": "Search pairing requests",
+            "clearFilter": "Clear filter",
+            "emptyDevicesHint": "No trusted devices yet. Add one from pairing tab.",
+            "emptyPairingHint": "No pairing requests for now.",
+            "emptyHistoryHint": "No sync history yet. Run manual sync to create records."
         ]
     ]
-    
+
     static func get(_ language: String, _ key: String) -> String {
-        return translations[language]?[key] ?? translations["en-US"]?[key] ?? key
+        translations[language]?[key] ?? translations["en-US"]?[key] ?? key
     }
 }
 
@@ -84,8 +97,7 @@ private struct PairingRequest: Identifiable {
 }
 
 private struct HistoryItem: Identifiable {
-            .animation(.easeInOut(duration: 0.3), value: selectedTab)
-    let id: UUID = UUID()
+    let id = UUID()
     let direction: String
     let contentType: String
     let preview: String
@@ -103,8 +115,18 @@ private struct SettingsModel {
 }
 
 struct IOSDashboardView: View {
-    @Environment(\.colorScheme) var systemColorScheme
-    
+    @Environment(\.colorScheme) private var systemColorScheme
+
+    @State private var selectedTab = 0
+    @State private var showConfirmDialog = false
+    @State private var confirmDialogTitle = ""
+    @State private var confirmDialogMessage = ""
+    @State private var confirmDialogOnConfirm: (() -> Void)? = nil
+
+    @State private var deviceQuery = ""
+    @State private var historyQuery = ""
+    @State private var pairingQuery = ""
+
     @State private var status = StatusViewModel(
         connectionState: .connected,
         syncedOutCount: 2,
@@ -114,15 +136,8 @@ struct IOSDashboardView: View {
         pendingPairingCount: 1,
         lastErrorMessage: nil
     )
-    
+
     @State private var errorMessage: String? = nil
-    @State private var isLoading: Bool = false
-    @State private var showConfirmDialog: Bool = false
-    @State private var confirmDialogTitle: String = ""
-    @State private var confirmDialogMessage: String = ""
-    @State private var confirmDialogOnConfirm: (() -> Void)? = nil
-    @State private var pendingDeleteIndices: IndexSet? = nil
-    @State private var pendingRejectRequestId: String? = nil
 
     @State private var trustedDevices: [TrustedDevice] = [
         TrustedDevice(id: "ios-handset", name: "iPhone", lastSeen: "just now"),
@@ -149,6 +164,24 @@ struct IOSDashboardView: View {
         pairingPolicy: "manual-approve"
     )
 
+    private var filteredDevices: [TrustedDevice] {
+        let q = deviceQuery.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !q.isEmpty else { return trustedDevices }
+        return trustedDevices.filter { $0.name.lowercased().contains(q) || $0.id.lowercased().contains(q) }
+    }
+
+    private var filteredHistory: [HistoryItem] {
+        let q = historyQuery.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !q.isEmpty else { return history }
+        return history.filter { $0.preview.lowercased().contains(q) || $0.contentType.lowercased().contains(q) }
+    }
+
+    private var filteredPairing: [PairingRequest] {
+        let q = pairingQuery.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !q.isEmpty else { return pairingRequests }
+        return pairingRequests.filter { $0.deviceName.lowercased().contains(q) || $0.platform.lowercased().contains(q) }
+    }
+
     var body: some View {
         ZStack {
             LinearGradient(
@@ -159,79 +192,48 @@ struct IOSDashboardView: View {
             .ignoresSafeArea()
 
             VStack {
-                // Error message display
                 if let error = errorMessage {
                     HStack {
                         Text(error)
                             .foregroundStyle(.red)
                         Spacer()
-                        Button("Dismiss") {
-                            errorMessage = nil
-                        }
+                        Button("×") { errorMessage = nil }
+                            .accessibilityLabel("Dismiss error")
                     }
                     .padding(12)
                     .background(Color.red.opacity(0.15))
                     .cornerRadius(8)
-                    .padding()
+                    .padding(.horizontal)
                 }
-                
-                if isLoading {
-                    VStack {
-                        ProgressView()
-                        Text("Loading...")
-                            .foregroundStyle(.secondary)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .center)
-                    .padding()
+
+                TabView(selection: $selectedTab) {
+                    statusView.tag(0).tabItem { Label(L10n.get(settings.language, "status"), systemImage: "chart.bar") }
+                    devicesView.tag(1).tabItem { Label(L10n.get(settings.language, "devices"), systemImage: "lock.shield") }
+                    pairingView.tag(2).tabItem { Label(L10n.get(settings.language, "pairing"), systemImage: "person.badge.plus") }
+                    historyView.tag(3).tabItem { Label(L10n.get(settings.language, "history"), systemImage: "clock") }
+                    settingsView.tag(4).tabItem { Label(L10n.get(settings.language, "settings"), systemImage: "gearshape") }
                 }
-                
-                    .transition(.opacity)@@
-                TabView {
-                statusView
-                    .tabItem { Label(L10n.get(settings.language, "status"), systemImage: "chart.bar") }
-
-                devicesView
-                    .tabItem { Label(L10n.get(settings.language, "devices"), systemImage: "lock.shield") }
-
-                pairingView
-                    .tabItem { Label(L10n.get(settings.language, "pairing"), systemImage: "person.badge.plus") }
-
-                historyView
-                    .tabItem { Label(L10n.get(settings.language, "history"), systemImage: "clock") }
-
-                settingsView
-                    .tabItem { Label(L10n.get(settings.language, "settings"), systemImage: "gearshape") }
-                }
+                .animation(.easeInOut(duration: 0.25), value: selectedTab)
             }
         }
-        .preferredColorScheme(getEffectiveColorScheme())
+        .preferredColorScheme(effectiveColorScheme)
         .onAppear {
-            // Auto detect system dark mode on first launch
             if systemColorScheme == .dark {
                 settings.darkMode = true
             }
         }
         .alert(confirmDialogTitle, isPresented: $showConfirmDialog) {
-            Button("Cancel", role: .cancel) { }
-            Button("Confirm", role: .destructive) {
+            Button(L10n.get(settings.language, "cancel"), role: .cancel) { }
+            Button(L10n.get(settings.language, "confirm"), role: .destructive) {
                 confirmDialogOnConfirm?()
             }
         } message: {
             Text(confirmDialogMessage)
         }
     }
-    
-    private func getEffectiveColorScheme() -> ColorScheme? {
-        // If user hasn't explicitly set dark mode, use system setting
-        // If dark mode explicit, force dark; if light explicit, force light
-        if systemColorScheme == .dark && !settings.darkMode {
-            return .dark
-        } else if settings.darkMode {
-            return .dark
-        } else {
-            return .light
-        }
-    }
+
+    private var effectiveColorScheme: ColorScheme? {
+        settings.darkMode ? .dark : (systemColorScheme == .dark ? .dark : .light)
     }
 
     private var statusView: some View {
@@ -239,7 +241,6 @@ struct IOSDashboardView: View {
             ScrollView {
                 VStack(spacing: 14) {
                     statusCard
-
                     Button(L10n.get(settings.language, "manualSync")) {
                         status.syncedOutCount += 1
                         status.syncedInCount += 1
@@ -248,6 +249,8 @@ struct IOSDashboardView: View {
                     }
                     .buttonStyle(.borderedProminent)
                     .frame(maxWidth: .infinity, alignment: .leading)
+                    .accessibilityLabel("Manual sync")
+                    .accessibilityHint("Synchronizes clipboard with trusted devices")
                 }
                 .padding()
             }
@@ -267,79 +270,93 @@ struct IOSDashboardView: View {
         }
         .padding(16)
         .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .accessibilityElement(children: .contain)
     }
 
     private var devicesView: some View {
         NavigationStack {
             List {
-                if trustedDevices.isEmpty {
-                    Text(L10n.get(settings.language, "noDevices"))
-                        .foregroundStyle(.secondary)
+                TextField(L10n.get(settings.language, "searchDevices"), text: $deviceQuery)
+                    .textInputAutocapitalization(.never)
+                    .accessibilityLabel("Search devices")
+
+                if filteredDevices.isEmpty {
+                    emptyStateView(
+                        title: L10n.get(settings.language, "noDevices"),
+                        message: L10n.get(settings.language, "emptyDevicesHint"),
+                        actionTitle: deviceQuery.isEmpty ? nil : L10n.get(settings.language, "clearFilter"),
+                        action: deviceQuery.isEmpty ? nil : { deviceQuery = "" }
+                    )
                 } else {
-                    ForEach(trustedDevices) { device in
+                    ForEach(filteredDevices) { device in
                         VStack(alignment: .leading, spacing: 4) {
                             Text(device.name).font(.headline)
                             Text("ID: \(device.id)").font(.caption)
                             Text("Last seen: \(device.lastSeen)").font(.caption2)
                         }
-                    }
-                    .onDelete { indexSet in
-                        let removed = indexSet.map { trustedDevices[$0] }
-                        let deviceNames = removed.map { $0.name }.joined(separator: ", ")
-                        pendingDeleteIndices = indexSet
-                        showConfirmDialog = true
-                        confirmDialogTitle = "Revoke Device"
-                        confirmDialogMessage = "Are you sure you want to revoke \(deviceNames)?"
-                        confirmDialogOnConfirm = {
-                            trustedDevices.remove(atOffsets: indexSet)
-                            status.rejectedEventCount += removed.count
-                            status.trustedDeviceCount = max(0, status.trustedDeviceCount - removed.count)
-                            status.lastErrorMessage = removed.first.map { "Revoked device: \($0.id)" }
-                            if let first = removed.first {
-                                history.insert(HistoryItem(direction: "event", contentType: "device", preview: "revoked \(first.id)", at: "now"), at: 0)
+                        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                            Button(role: .destructive) {
+                                confirmDialogTitle = L10n.get(settings.language, "revoke")
+                                confirmDialogMessage = "Revoke \(device.name)?"
+                                confirmDialogOnConfirm = {
+                                    trustedDevices.removeAll { $0.id == device.id }
+                                    status.rejectedEventCount += 1
+                                    status.trustedDeviceCount = max(0, status.trustedDeviceCount - 1)
+                                    status.lastErrorMessage = "Revoked device: \(device.id)"
+                                }
+                                showConfirmDialog = true
+                            } label: {
+                                Text(L10n.get(settings.language, "revoke"))
                             }
                         }
+                        .accessibilityLabel("Device \(device.name)")
                     }
                 }
             }
             .navigationTitle(L10n.get(settings.language, "devices"))
-            .toolbar { EditButton() }
         }
     }
 
     private var pairingView: some View {
         NavigationStack {
             List {
-                if pairingRequests.isEmpty {
-                    Text(L10n.get(settings.language, "noPairingRequests"))
-                        .foregroundStyle(.secondary)
+                TextField(L10n.get(settings.language, "searchPairing"), text: $pairingQuery)
+                    .textInputAutocapitalization(.never)
+                    .accessibilityLabel("Search pairing requests")
+
+                if filteredPairing.isEmpty {
+                    emptyStateView(
+                        title: L10n.get(settings.language, "noPairingRequests"),
+                        message: L10n.get(settings.language, "emptyPairingHint"),
+                        actionTitle: pairingQuery.isEmpty ? nil : L10n.get(settings.language, "clearFilter"),
+                        action: pairingQuery.isEmpty ? nil : { pairingQuery = "" }
+                    )
                 } else {
-                    ForEach(pairingRequests) { req in
+                    ForEach(filteredPairing) { req in
                         VStack(alignment: .leading, spacing: 8) {
                             Text(req.deviceName).font(.headline)
                             Text("\(L10n.get(settings.language, "status")): \(req.platform)").font(.caption)
-                            Text("\(L10n.get(settings.language, "lastError")): \(req.requestedAt)").font(.caption2)
+                            Text("Requested: \(req.requestedAt)").font(.caption2)
                             HStack {
                                 Button(L10n.get(settings.language, "approve")) {
                                     pairingRequests.removeAll { $0.id == req.id }
                                     status.pendingPairingCount = max(0, status.pendingPairingCount - 1)
                                     status.trustedDeviceCount += 1
-                                    history.insert(HistoryItem(direction: "event", contentType: "pairing", preview: "approved \(req.deviceName)", at: "now"), at: 0)
                                 }
                                 .buttonStyle(.borderedProminent)
+                                .accessibilityLabel("Approve \(req.deviceName)")
 
                                 Button(L10n.get(settings.language, "reject"), role: .destructive) {
-                                    pendingRejectRequestId = req.id
-                                    showConfirmDialog = true
                                     confirmDialogTitle = L10n.get(settings.language, "reject")
-                                    confirmDialogMessage = "Are you sure you want to reject \(req.deviceName)?"
+                                    confirmDialogMessage = "Reject \(req.deviceName)?"
                                     confirmDialogOnConfirm = {
                                         pairingRequests.removeAll { $0.id == req.id }
                                         status.pendingPairingCount = max(0, status.pendingPairingCount - 1)
-                                        history.insert(HistoryItem(direction: "event", contentType: "pairing", preview: "rejected \(req.deviceName)", at: "now"), at: 0)
                                     }
+                                    showConfirmDialog = true
                                 }
                                 .buttonStyle(.bordered)
+                                .accessibilityLabel("Reject \(req.deviceName)")
                             }
                         }
                     }
@@ -352,11 +369,19 @@ struct IOSDashboardView: View {
     private var historyView: some View {
         NavigationStack {
             List {
-                if history.isEmpty {
-                    Text(L10n.get(settings.language, "noHistory"))
-                        .foregroundStyle(.secondary)
+                TextField(L10n.get(settings.language, "searchHistory"), text: $historyQuery)
+                    .textInputAutocapitalization(.never)
+                    .accessibilityLabel("Search history")
+
+                if filteredHistory.isEmpty {
+                    emptyStateView(
+                        title: L10n.get(settings.language, "noHistory"),
+                        message: L10n.get(settings.language, "emptyHistoryHint"),
+                        actionTitle: historyQuery.isEmpty ? nil : L10n.get(settings.language, "clearFilter"),
+                        action: historyQuery.isEmpty ? nil : { historyQuery = "" }
+                    )
                 } else {
-                    ForEach(history) { item in
+                    ForEach(filteredHistory) { item in
                         VStack(alignment: .leading, spacing: 4) {
                             Text("[\(item.direction)] \(item.contentType)").font(.headline)
                             Text(item.preview)
@@ -390,6 +415,19 @@ struct IOSDashboardView: View {
             Spacer()
             Text(value)
         }
+    }
+
+    @ViewBuilder
+    private func emptyStateView(title: String, message: String, actionTitle: String?, action: (() -> Void)?) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title).font(.headline)
+            Text(message).foregroundStyle(.secondary)
+            if let actionTitle, let action {
+                Button(actionTitle, action: action)
+                    .buttonStyle(.bordered)
+            }
+        }
+        .padding(.vertical, 8)
     }
 }
 

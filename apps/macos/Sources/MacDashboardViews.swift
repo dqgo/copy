@@ -1,6 +1,5 @@
 import SwiftUI
 
-// i18n translations
 struct MacL10n {
     static let translations: [String: [String: String]] = [
         "zh-CN": [
@@ -18,21 +17,18 @@ struct MacL10n {
             "approve": "批准",
             "reject": "拒绝",
             "revoke": "撤销",
-            "language": "语言",
             "darkMode": "深色模式",
-            "syncMode": "同步模式",
-            "space": "工作空间",
-            "pairingPolicy": "配对策略",
             "webdev": "WebDev 同步",
             "server": "本地服务模式",
             "manualSync": "手动同步",
+            "lastError": "最近错误",
             "noDevices": "暂无设备",
             "noPairingRequests": "暂无配对请求",
-            "noHistory": "暂无历史记录",
-            "lastError": "最近错误",
-            "confirrm": "确认",
-            "confirm": "确认",
-            "cancel": "取消"
+            "searchDevices": "搜索设备",
+            "searchPairing": "搜索配对请求",
+            "clearFilter": "清空筛选",
+            "emptyDevicesHint": "暂无可信设备，可前往配对窗口添加",
+            "emptyPairingHint": "暂无配对请求，等待新设备发起即可"
         ],
         "en-US": [
             "status": "Status",
@@ -49,25 +45,23 @@ struct MacL10n {
             "approve": "Approve",
             "reject": "Reject",
             "revoke": "Revoke",
-            "language": "Language",
             "darkMode": "Dark Mode",
-            "syncMode": "Sync Mode",
-            "space": "Space",
-            "pairingPolicy": "Pairing Policy",
             "webdev": "WebDev Sync",
             "server": "Local Server Mode",
             "manualSync": "Manual Sync",
+            "lastError": "Last Error",
             "noDevices": "No devices",
             "noPairingRequests": "No pairing requests",
-            "noHistory": "No history",
-            "lastError": "Last Error",
-            "confirm": "Confirm",
-            "cancel": "Cancel"
+            "searchDevices": "Search devices",
+            "searchPairing": "Search pairing requests",
+            "clearFilter": "Clear filter",
+            "emptyDevicesHint": "No trusted devices yet. Add one from pairing window.",
+            "emptyPairingHint": "No pairing requests for now."
         ]
     ]
-    
+
     static func get(_ language: String, _ key: String) -> String {
-        return translations[language]?[key] ?? translations["en-US"]?[key] ?? key
+        translations[language]?[key] ?? translations["en-US"]?[key] ?? key
     }
 }
 
@@ -77,24 +71,6 @@ private struct MacTrustedDevice: Identifiable {
     let lastSeen: String
 }
 
-private struct SyncHistoryItem: Identifiable {
-    let id: UUID = UUID()
-    let direction: String
-    let contentType: String
-    let summary: String
-    let time: String
-}
-
-private struct SettingsModel {
-    var language: String
-    var darkMode: Bool
-    var syncMode: String
-    var spaceId: String
-    var webDevEnabled: Bool
-    var localServerEnabled: Bool
-    var pairingPolicy: String
-}
-
 private struct PairingRequestItem: Identifiable {
     let id: String
     let deviceName: String
@@ -102,9 +78,25 @@ private struct PairingRequestItem: Identifiable {
     let at: String
 }
 
+private struct SyncHistoryItem: Identifiable {
+    let id = UUID()
+    let direction: String
+    let contentType: String
+    let summary: String
+    let time: String
+}
+
+private struct MacSettingsModel {
+    var language: String
+    var darkMode: Bool
+    var webDevEnabled: Bool
+    var localServerEnabled: Bool
+}
+
 struct MacStatusMenuView: View {
-    @Environment(\.colorScheme) var systemColorScheme
-    
+    @Environment(\.colorScheme) private var systemColorScheme
+
+    @State private var settings = MacSettingsModel(language: "zh-CN", darkMode: false, webDevEnabled: false, localServerEnabled: false)
     @State private var status = StatusViewModel(
         connectionState: .connected,
         syncedOutCount: 12,
@@ -114,43 +106,13 @@ struct MacStatusMenuView: View {
         pendingPairingCount: 1,
         lastErrorMessage: "Revoked device: old-ipad"
     )
-    
-    @State private var errorMessage: String? = nil
-    @State private var isLoading: Bool = false
-
-    @State private var settings = SettingsModel(
-        language: "zh-CN",
-        darkMode: false,
-        syncMode: "manual",
-        spaceId: "default",
-        webDevEnabled: false,
-        localServerEnabled: false,
-        pairingPolicy: "manual-approve"
-    )
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            // Error message display
-            if let error = errorMessage {
-                HStack {
-                    Text(error)
-                        .font(.caption)
-                        .foregroundStyle(.red)
-                    Spacer()
-                    Button("✕") {
-                        errorMessage = nil
-                    }
-                    .buttonStyle(.plain)
-                }
-                .padding(8)
-                .background(Color.red.opacity(0.15))
-                .cornerRadius(6)
-            }
-            
             Text("Clipboard Sync Status")
                 .font(.headline)
-                Label(status.connectionState.rawValue, systemImage: status.connectionState == .connected ? "checkmark.circle" : "xmark.circle")
-                    .animation(.easeInOut(duration: 0.2), value: errorMessage)
+            Label(status.connectionState.rawValue, systemImage: status.connectionState == .connected ? "checkmark.circle" : "xmark.circle")
+                .accessibilityLabel("Connection status \(status.connectionState.rawValue)")
             Text("\(MacL10n.get(settings.language, "sent")): \(status.syncedOutCount)")
             Text("\(MacL10n.get(settings.language, "received")): \(status.syncedInCount)")
             Text("\(MacL10n.get(settings.language, "rejected")): \(status.rejectedEventCount)")
@@ -167,40 +129,16 @@ struct MacStatusMenuView: View {
                 status.syncedInCount += 1
                 status.lastErrorMessage = nil
             }
+            .accessibilityLabel("Manual sync")
 
             Toggle(MacL10n.get(settings.language, "darkMode"), isOn: $settings.darkMode)
             Toggle(MacL10n.get(settings.language, "webdev"), isOn: $settings.webDevEnabled)
             Toggle(MacL10n.get(settings.language, "server"), isOn: $settings.localServerEnabled)
-            Text("\(MacL10n.get(settings.language, "pairingPolicy")): \(settings.pairingPolicy)")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-
-            Text("Use menu bar for background listener visibility.")
-                .font(.caption2)
-                .foregroundStyle(.secondary)
         }
         .padding(12)
-        .frame(width: 280)
-        .background(
-            LinearGradient(colors: [Color.blue.opacity(0.25), Color.teal.opacity(0.18)], startPoint: .topLeading, endPoint: .bottomTrailing)
-        )
-        .preferredColorScheme(getEffectiveColorScheme())
-        .onAppear {
-            // Auto detect system dark mode on first launch
-            if systemColorScheme == .dark {
-                settings.darkMode = true
-            }
-        }
-    }
-    
-    private func getEffectiveColorScheme() -> ColorScheme? {
-        if systemColorScheme == .dark && !settings.darkMode {
-            return .dark
-        } else if settings.darkMode {
-            return .dark
-        } else {
-            return .light
-        }
+        .frame(width: 300)
+        .background(LinearGradient(colors: [Color.blue.opacity(0.25), Color.teal.opacity(0.18)], startPoint: .topLeading, endPoint: .bottomTrailing))
+        .preferredColorScheme(settings.darkMode ? .dark : (systemColorScheme == .dark ? .dark : .light))
     }
 }
 
@@ -210,59 +148,64 @@ struct MacTrustedDevicesWindowView: View {
         MacTrustedDevice(id: "win-local", name: "Windows Desktop", lastSeen: "6 min ago"),
         MacTrustedDevice(id: "android-main", name: "Android Phone", lastSeen: "14 min ago")
     ]
-    @State private var showConfirmDialog: Bool = false
-    @State private var confirmDialogTitle: String = ""
-    @State private var confirmDialogMessage: String = ""
-    @State private var pendingDeleteIndices: IndexSet? = nil
-    @State private var confirmDialogOnConfirm: (() -> Void)? = nil
+    @State private var query = ""
+    @State private var showConfirmDialog = false
+    @State private var pendingDevice: MacTrustedDevice?
+
+    private var filteredDevices: [MacTrustedDevice] {
+        let q = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !q.isEmpty else { return devices }
+        return devices.filter { $0.name.lowercased().contains(q) || $0.id.lowercased().contains(q) }
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Trusted Devices")
-                .font(.title2)
+            Text("Trusted Devices").font(.title2)
+            TextField(MacL10n.get("en-US", "searchDevices"), text: $query)
+                .textFieldStyle(.roundedBorder)
+                .accessibilityLabel("Search devices")
+
             List {
-                ForEach(devices) { device in
-                    VStack(alignment: .leading) {
-                        Text(device.name).font(.headline)
-                        Text("ID: \(device.id)").font(.caption)
-                        Text("Last seen: \(device.lastSeen)").font(.caption2)
+                if filteredDevices.isEmpty {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(MacL10n.get("en-US", "noDevices")).font(.headline)
+                        Text(MacL10n.get("en-US", "emptyDevicesHint")).foregroundStyle(.secondary)
+                        if !query.isEmpty {
+                            Button(MacL10n.get("en-US", "clearFilter")) { query = "" }
+                                .buttonStyle(.bordered)
+                        }
                     }
-                }
-                .onDelete { indexSet in
-                    let removed = indexSet.map { devices[$0] }
-                    let deviceNames = removed.map { $0.name }.joined(separator: ", ")
-                    pendingDeleteIndices = indexSet
-                    showConfirmDialog = true
-                    confirmDialogTitle = "Revoke Device"
-                    confirmDialogMessage = "Are you sure you want to revoke \(deviceNames)?"
-                    confirmDialogOnConfirm = {
-                        devices.remove(atOffsets: indexSet)
+                } else {
+                    ForEach(filteredDevices) { device in
+                        VStack(alignment: .leading) {
+                            Text(device.name).font(.headline)
+                            Text("ID: \(device.id)").font(.caption)
+                            Text("Last seen: \(device.lastSeen)").font(.caption2)
+                        }
+                        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                            Button(role: .destructive) {
+                                pendingDevice = device
+                                showConfirmDialog = true
+                            } label: {
+                                Text(MacL10n.get("en-US", "revoke"))
+                            }
+                        }
+                        .accessibilityLabel("Device \(device.name)")
                     }
                 }
             }
-        }
-        .padding(16)
-        .frame(minWidth: 500, minHeight: 360)
-        .alert(confirmDialogTitle, isPresented: $showConfirmDialog) {
-            Button("Cancel", role: .cancel) { }
         }
         .padding(16)
         .frame(minWidth: 520, minHeight: 360)
-        .alert(confirmDialogTitle, isPresented: $showConfirmDialog) {
+        .alert("Revoke device", isPresented: $showConfirmDialog) {
             Button("Cancel", role: .cancel) { }
-            Button("Reject", role: .destructive) {
-                confirmDialogOnConfirm?()
-            }
-        } message: {
-            Text(confirmDialogMessage)
-        }
-    }
-}
             Button("Revoke", role: .destructive) {
-                confirmDialogOnConfirm?()
+                if let pendingDevice {
+                    devices.removeAll { $0.id == pendingDevice.id }
+                }
             }
         } message: {
-            Text(confirmDialogMessage)
+            Text("Do you want to revoke this device?")
         }
     }
 }
@@ -272,38 +215,53 @@ struct MacPairingRequestsWindowView: View {
         PairingRequestItem(id: "req-mac-001", deviceName: "Pixel 9", platform: "android", at: "10:12"),
         PairingRequestItem(id: "req-mac-002", deviceName: "iPad Air", platform: "ios", at: "10:14")
     ]
-    @State private var showConfirmDialog: Bool = false
-    @State private var confirmDialogTitle: String = ""
-    @State private var confirmDialogMessage: String = ""
-    @State private var pendingRejectRequestId: String? = nil
-    @State private var confirmDialogOnConfirm: (() -> Void)? = nil
+    @State private var query = ""
+    @State private var showConfirmDialog = false
+    @State private var pendingReject: PairingRequestItem?
+
+    private var filteredRequests: [PairingRequestItem] {
+        let q = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !q.isEmpty else { return requests }
+        return requests.filter { $0.deviceName.lowercased().contains(q) || $0.platform.lowercased().contains(q) }
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Pairing Requests")
-                .font(.title2)
-            List {
-                ForEach(requests) { req in
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text(req.deviceName).font(.headline)
-                        Text("Platform: \(req.platform)").font(.caption)
-                        Text("Requested: \(req.at)").font(.caption2)
-                        HStack {
-                            Button("Approve") {
-                                requests.removeAll { $0.id == req.id }
-                            }
-                            .buttonStyle(.borderedProminent)
+            Text("Pairing Requests").font(.title2)
+            TextField(MacL10n.get("en-US", "searchPairing"), text: $query)
+                .textFieldStyle(.roundedBorder)
+                .accessibilityLabel("Search pairing requests")
 
-                            Button("Reject", role: .destructive) {
-                                pendingRejectRequestId = req.id
-                                showConfirmDialog = true
-                                confirmDialogTitle = "Reject Request"
-                                confirmDialogMessage = "Are you sure you want to reject \(req.deviceName)?"
-                                confirmDialogOnConfirm = {
+            List {
+                if filteredRequests.isEmpty {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(MacL10n.get("en-US", "noPairingRequests")).font(.headline)
+                        Text(MacL10n.get("en-US", "emptyPairingHint")).foregroundStyle(.secondary)
+                        if !query.isEmpty {
+                            Button(MacL10n.get("en-US", "clearFilter")) { query = "" }
+                                .buttonStyle(.bordered)
+                        }
+                    }
+                } else {
+                    ForEach(filteredRequests) { req in
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text(req.deviceName).font(.headline)
+                            Text("Platform: \(req.platform)").font(.caption)
+                            Text("Requested: \(req.at)").font(.caption2)
+                            HStack {
+                                Button(MacL10n.get("en-US", "approve")) {
                                     requests.removeAll { $0.id == req.id }
                                 }
+                                .buttonStyle(.borderedProminent)
+                                .accessibilityLabel("Approve \(req.deviceName)")
+
+                                Button(MacL10n.get("en-US", "reject"), role: .destructive) {
+                                    pendingReject = req
+                                    showConfirmDialog = true
+                                }
+                                .buttonStyle(.bordered)
+                                .accessibilityLabel("Reject \(req.deviceName)")
                             }
-                            .buttonStyle(.bordered)
                         }
                     }
                 }
@@ -311,6 +269,16 @@ struct MacPairingRequestsWindowView: View {
         }
         .padding(16)
         .frame(minWidth: 520, minHeight: 360)
+        .alert("Reject request", isPresented: $showConfirmDialog) {
+            Button("Cancel", role: .cancel) { }
+            Button("Reject", role: .destructive) {
+                if let pendingReject {
+                    requests.removeAll { $0.id == pendingReject.id }
+                }
+            }
+        } message: {
+            Text("Do you want to reject this pairing request?")
+        }
     }
 }
 
@@ -323,14 +291,12 @@ struct MacHistoryWindowView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Sync History")
-                .font(.title2)
+            Text("Sync History").font(.title2)
             List(history) { item in
                 HStack {
                     Text("[\(item.direction)] \(item.contentType) · \(item.summary)")
                     Spacer()
-                    Text(item.time)
-                        .foregroundStyle(.secondary)
+                    Text(item.time).foregroundStyle(.secondary)
                 }
             }
         }

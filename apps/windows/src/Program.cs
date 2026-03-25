@@ -115,7 +115,10 @@ internal static class Program
             ["errorLoading"] = "加载失败，请重试",
             ["confirmRevoke"] = "确认撤销此设备的配对吗？此操作无法撤销。",
             ["confirmReject"] = "确认拒绝此配对请求吗？",
-            ["retry"] = "重试"
+            ["retry"] = "重试",
+            ["clearFilter"] = "清空筛选",
+            ["emptyDevicesHint"] = "暂无可信设备，可前往配对页添加",
+            ["emptyPairingHint"] = "暂无配对请求，等待新设备发起即可"
         },
         ["en-US"] = new Dictionary<string, string>
         {
@@ -166,7 +169,10 @@ internal static class Program
             ["errorLoading"] = "Failed to load, please retry",
             ["confirmRevoke"] = "Confirm revoking this device's pairing? This action cannot be undone.",
             ["confirmReject"] = "Confirm rejecting this pairing request?",
-            ["retry"] = "Retry"
+            ["retry"] = "Retry",
+            ["clearFilter"] = "Clear Filter",
+            ["emptyDevicesHint"] = "No trusted devices yet. Add one from pairing tab.",
+            ["emptyPairingHint"] = "No pairing requests for now."
         }
     };
 
@@ -344,14 +350,38 @@ internal static class Program
         statusTab.Controls.Add(statusGrid);
 
         var deviceGrid = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 2, ColumnCount = 1, Padding = new Padding(16) };
+        deviceGrid.RowCount = 3;
+        deviceGrid.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         deviceGrid.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         deviceGrid.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        var deviceSearch = new TextBox { Dock = DockStyle.Top, PlaceholderText = "Search devices..." };
+        deviceSearch.AccessibleName = "Device Search";
+        deviceSearch.AccessibleDescription = "Filter trusted devices by name or device id";
         var deviceList = new ListBox { Dock = DockStyle.Fill };
-        foreach (var d in trustedDevices)
+        var deviceEmptyHint = new Label { Dock = DockStyle.Top, AutoSize = true, Text = T(locale, "emptyDevicesHint"), ForeColor = Color.DimGray, Visible = false };
+        var deviceClearFilter = new Button { Text = T(locale, "clearFilter"), Height = 30, Dock = DockStyle.Top, Visible = false };
+        deviceClearFilter.Click += (_, _) => { deviceSearch.Text = string.Empty; RefreshDeviceList(); };
+        deviceList.AccessibleName = "Trusted Device List";
+        void RefreshDeviceList()
         {
-            deviceList.Items.Add(d);
+            var query = deviceSearch.Text?.Trim() ?? string.Empty;
+            deviceList.Items.Clear();
+            foreach (var d in trustedDevices)
+            {
+                if (query.Length == 0 || d.Name.Contains(query, StringComparison.OrdinalIgnoreCase) || d.DeviceId.Contains(query, StringComparison.OrdinalIgnoreCase))
+                {
+                    deviceList.Items.Add(d);
+                }
+            }
+            var isEmpty = deviceList.Items.Count == 0;
+            deviceEmptyHint.Visible = isEmpty;
+            deviceClearFilter.Visible = isEmpty && query.Length > 0;
         }
+        deviceSearch.TextChanged += (_, _) => RefreshDeviceList();
+        RefreshDeviceList();
         var revoke = new Button { Text = T(locale, "revoke"), Height = 34, Dock = DockStyle.Top };
+        revoke.AccessibleName = "Revoke Device";
+        revoke.AccessibleDescription = "Revoke selected trusted device";
         revoke.Click += (_, _) =>
         {
             if (deviceList.SelectedItem is DeviceItem selected)
@@ -366,7 +396,8 @@ internal static class Program
                 
                 if (dialogResult == DialogResult.OK)
                 {
-                    deviceList.Items.Remove(selected);
+                    trustedDevices.RemoveAll(d => d.DeviceId == selected.DeviceId);
+                    RefreshDeviceList();
                     status.RejectedEventCount += 1;
                     rejValue.Text = status.RejectedEventCount.ToString();
                     status.LastErrorMessage = $"Revoked device: {selected.DeviceId}";
@@ -375,28 +406,56 @@ internal static class Program
                 }
             }
         };
-        deviceGrid.Controls.Add(deviceList, 0, 0);
-        deviceGrid.Controls.Add(revoke, 0, 1);
+        deviceGrid.Controls.Add(deviceSearch, 0, 0);
+        deviceGrid.Controls.Add(deviceList, 0, 1);
+        deviceGrid.Controls.Add(revoke, 0, 2);
+        deviceGrid.Controls.Add(deviceEmptyHint, 0, 2);
+        deviceGrid.Controls.Add(deviceClearFilter, 0, 2);
         devicesTab.Controls.Add(deviceGrid);
 
         var pairingGrid = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 2, ColumnCount = 1, Padding = new Padding(16) };
+        pairingGrid.RowCount = 3;
+        pairingGrid.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         pairingGrid.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         pairingGrid.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        var pairingSearch = new TextBox { Dock = DockStyle.Top, PlaceholderText = "Search requests..." };
+        pairingSearch.AccessibleName = "Pairing Search";
+        pairingSearch.AccessibleDescription = "Filter pairing requests by device name or platform";
         var pairingList = new ListBox { Dock = DockStyle.Fill };
-        foreach (var req in pairingRequests)
+        var pairingEmptyHint = new Label { Dock = DockStyle.Top, AutoSize = true, Text = T(locale, "emptyPairingHint"), ForeColor = Color.DimGray, Visible = false };
+        var pairingClearFilter = new Button { Text = T(locale, "clearFilter"), Height = 30, Dock = DockStyle.Top, Visible = false };
+        pairingClearFilter.Click += (_, _) => { pairingSearch.Text = string.Empty; RefreshPairingList(); };
+        pairingList.AccessibleName = "Pairing Request List";
+        void RefreshPairingList()
         {
-            pairingList.Items.Add(req);
+            var query = pairingSearch.Text?.Trim() ?? string.Empty;
+            pairingList.Items.Clear();
+            foreach (var req in pairingRequests)
+            {
+                if (query.Length == 0 || req.DeviceName.Contains(query, StringComparison.OrdinalIgnoreCase) || req.Platform.Contains(query, StringComparison.OrdinalIgnoreCase))
+                {
+                    pairingList.Items.Add(req);
+                }
+            }
+            var isEmpty = pairingList.Items.Count == 0;
+            pairingEmptyHint.Visible = isEmpty;
+            pairingClearFilter.Visible = isEmpty && query.Length > 0;
         }
+        pairingSearch.TextChanged += (_, _) => RefreshPairingList();
+        RefreshPairingList();
 
         var pairingActions = new FlowLayoutPanel { AutoSize = true, FlowDirection = FlowDirection.LeftToRight, Dock = DockStyle.Top };
         var approve = new Button { Text = T(locale, "approve"), Width = 130, Height = 34 };
         var reject = new Button { Text = T(locale, "reject"), Width = 130, Height = 34 };
+        approve.AccessibleName = "Approve Pairing Request";
+        reject.AccessibleName = "Reject Pairing Request";
 
         approve.Click += (_, _) =>
         {
             if (pairingList.SelectedItem is PairingRequestItem selected)
             {
-                pairingList.Items.Remove(selected);
+                pairingRequests.RemoveAll(r => r.RequestId == selected.RequestId);
+                RefreshPairingList();
                 status.PendingPairingCount = Math.Max(0, status.PendingPairingCount - 1);
                 status.TrustedDeviceCount += 1;
                 pendingValue.Text = status.PendingPairingCount.ToString();
@@ -419,7 +478,8 @@ internal static class Program
                 
                 if (dialogResult == DialogResult.OK)
                 {
-                    pairingList.Items.Remove(selected);
+                    pairingRequests.RemoveAll(r => r.RequestId == selected.RequestId);
+                    RefreshPairingList();
                     status.PendingPairingCount = Math.Max(0, status.PendingPairingCount - 1);
                     pendingValue.Text = status.PendingPairingCount.ToString();
                     history.Items.Insert(0, $"[event] pairing · rejected {selected.DeviceName}");
@@ -429,8 +489,11 @@ internal static class Program
 
         pairingActions.Controls.Add(approve);
         pairingActions.Controls.Add(reject);
-        pairingGrid.Controls.Add(pairingList, 0, 0);
-        pairingGrid.Controls.Add(pairingActions, 0, 1);
+        pairingGrid.Controls.Add(pairingSearch, 0, 0);
+        pairingGrid.Controls.Add(pairingList, 0, 1);
+        pairingGrid.Controls.Add(pairingActions, 0, 2);
+        pairingGrid.Controls.Add(pairingEmptyHint, 0, 2);
+        pairingGrid.Controls.Add(pairingClearFilter, 0, 2);
         pairingTab.Controls.Add(pairingGrid);
 
         historyTab.Controls.Add(history);
