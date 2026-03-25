@@ -3,8 +3,11 @@ package com.clipboardsync
 import android.content.Intent
 import android.os.Build
 import android.os.Bundle
+import android.app.NotificationChannel
+import android.app.NotificationManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.core.app.NotificationCompat
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -173,6 +176,10 @@ data class DashboardState(
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        val secureStore = AndroidKeystoreStore(this)
+        if (secureStore.get("workspace_key") == null) {
+            secureStore.set("workspace_key", "wsk-android-${System.currentTimeMillis()}")
+        }
         val quickServiceIntent = Intent(this, SyncQuickActionService::class.java)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             startForegroundService(quickServiceIntent)
@@ -180,6 +187,29 @@ class MainActivity : ComponentActivity() {
             startService(quickServiceIntent)
         }
         setContent { ClipboardSyncAndroidApp() }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        val manager = getSystemService(NotificationManager::class.java)
+        manager.cancel(2002)
+    }
+
+    override fun onStop() {
+        super.onStop()
+        val channelId = "clipboardsync.lifecycle"
+        val manager = getSystemService(NotificationManager::class.java)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = NotificationChannel(channelId, "Clipboard Sync Lifecycle", NotificationManager.IMPORTANCE_LOW)
+            manager.createNotificationChannel(channel)
+        }
+        val notification = NotificationCompat.Builder(this, channelId)
+            .setSmallIcon(android.R.drawable.stat_notify_sync)
+            .setContentTitle("Clipboard Sync")
+            .setContentText("App in background, foreground service still active")
+            .setAutoCancel(false)
+            .build()
+        manager.notify(2002, notification)
     }
 }
 
