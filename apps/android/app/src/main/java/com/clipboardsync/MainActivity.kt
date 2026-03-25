@@ -47,6 +47,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.isSystemInDarkTheme
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -57,6 +58,9 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 object AppStrings {
     private val translations = mapOf(
@@ -81,6 +85,9 @@ object AppStrings {
             "space" to "工作空间",
             "pairingPolicy" to "配对策略",
             "webdev" to "WebDev 同步",
+            "webdevUrl" to "WebDev 地址",
+            "webdevUser" to "WebDev 用户名",
+            "webdevPassword" to "WebDev 密码",
             "server" to "本地服务模式",
             "manualSync" to "手动同步",
             "sendHtml" to "发送 HTML",
@@ -121,6 +128,9 @@ object AppStrings {
             "space" to "Space",
             "pairingPolicy" to "Pairing Policy",
             "webdev" to "WebDev Sync",
+            "webdevUrl" to "WebDev URL",
+            "webdevUser" to "WebDev Username",
+            "webdevPassword" to "WebDev Password",
             "server" to "Local Server Mode",
             "manualSync" to "Manual Sync",
             "sendHtml" to "Send HTML",
@@ -155,6 +165,9 @@ data class SettingsUi(
     val syncMode: String,
     val spaceId: String,
     val webDevEnabled: Boolean,
+    val webDevBaseUrl: String,
+    val webDevUsername: String,
+    val webDevPassword: String,
     val localServerEnabled: Boolean,
     val pairingPolicy: String
 )
@@ -249,6 +262,9 @@ private fun ClipboardSyncAndroidApp() {
                     syncMode = "manual",
                     spaceId = "default",
                     webDevEnabled = false,
+                    webDevBaseUrl = "",
+                    webDevUsername = "",
+                    webDevPassword = "",
                     localServerEnabled = false,
                     pairingPolicy = "manual-approve"
                 ),
@@ -256,6 +272,7 @@ private fun ClipboardSyncAndroidApp() {
             )
         )
     }
+    val coroutineScope = rememberCoroutineScope()
 
     val filteredDevices = state.devices.filter {
         val q = deviceQuery.trim().lowercase()
@@ -327,14 +344,43 @@ private fun ClipboardSyncAndroidApp() {
                                 status = state.status,
                                 language = state.settings.language,
                                 onManualSync = {
-                                    state = state.copy(
-                                        status = state.status.copy(
-                                            syncedOutCount = state.status.syncedOutCount + 1,
-                                            syncedInCount = state.status.syncedInCount + 1,
-                                            lastErrorMessage = "None"
-                                        ),
-                                        history = listOf(HistoryUi("out", "text/plain", "manual sync", "now")) + state.history
-                                    )
+                                    val webdev = state.settings.webDevEnabled && state.settings.webDevBaseUrl.isNotBlank()
+                                    if (webdev) {
+                                        val cfg = WebDavConfig(
+                                            enabled = true,
+                                            baseUrl = state.settings.webDevBaseUrl,
+                                            username = state.settings.webDevUsername,
+                                            password = state.settings.webDevPassword
+                                        )
+                                        coroutineScope.launch(Dispatchers.IO) {
+                                            val outText = "manual sync from android @${System.currentTimeMillis()}"
+                                            val uploaded = WebDavClient.uploadText(cfg, outText)
+                                            val remote = WebDavClient.downloadText(cfg)
+                                            withContext(Dispatchers.Main) {
+                                                state = state.copy(
+                                                    status = state.status.copy(
+                                                        syncedOutCount = state.status.syncedOutCount + if (uploaded) 1 else 0,
+                                                        syncedInCount = state.status.syncedInCount + if (remote != null) 1 else 0,
+                                                        lastErrorMessage = if (uploaded) "None" else "webdev upload failed"
+                                                    ),
+                                                    history = buildList {
+                                                        if (remote != null) add(HistoryUi("in", "text/plain", remote.take(64), "now"))
+                                                        if (uploaded) add(HistoryUi("out", "text/plain", outText, "now"))
+                                                        addAll(state.history)
+                                                    }
+                                                )
+                                            }
+                                        }
+                                    } else {
+                                        state = state.copy(
+                                            status = state.status.copy(
+                                                syncedOutCount = state.status.syncedOutCount + 1,
+                                                syncedInCount = state.status.syncedInCount + 1,
+                                                lastErrorMessage = "None"
+                                            ),
+                                            history = listOf(HistoryUi("out", "text/plain", "manual sync", "now")) + state.history
+                                        )
+                                    }
                                 },
                                 onSendHtml = {
                                     state = state.copy(
@@ -635,6 +681,24 @@ private fun SettingsTab(settings: SettingsUi, language: String, onChange: (Setti
                 Spacer(modifier = Modifier.weight(1f))
                 Checkbox(checked = settings.webDevEnabled, onCheckedChange = { onChange(settings.copy(webDevEnabled = it)) })
             }
+            OutlinedTextField(
+                value = settings.webDevBaseUrl,
+                onValueChange = { onChange(settings.copy(webDevBaseUrl = it)) },
+                label = { Text(AppStrings.get(language, "webdevUrl")) },
+                modifier = Modifier.fillMaxWidth()
+            )
+            OutlinedTextField(
+                value = settings.webDevUsername,
+                onValueChange = { onChange(settings.copy(webDevUsername = it)) },
+                label = { Text(AppStrings.get(language, "webdevUser")) },
+                modifier = Modifier.fillMaxWidth()
+            )
+            OutlinedTextField(
+                value = settings.webDevPassword,
+                onValueChange = { onChange(settings.copy(webDevPassword = it)) },
+                label = { Text(AppStrings.get(language, "webdevPassword")) },
+                modifier = Modifier.fillMaxWidth()
+            )
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(AppStrings.get(language, "server"))
                 Spacer(modifier = Modifier.weight(1f))

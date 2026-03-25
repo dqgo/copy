@@ -91,6 +91,9 @@ internal static class Program
             ["space"] = "工作空间",
             ["pairingPolicy"] = "配对策略",
             ["webdev"] = "启用 WebDev 同步",
+            ["webdevUrl"] = "WebDev 地址",
+            ["webdevUser"] = "WebDev 用户名",
+            ["webdevPassword"] = "WebDev 密码",
             ["server"] = "启用本地服务模式",
             ["sendHtml"] = "发送 HTML",
             ["sendImage"] = "发送图片",
@@ -145,6 +148,9 @@ internal static class Program
             ["space"] = "Space",
             ["pairingPolicy"] = "Pairing Policy",
             ["webdev"] = "Enable WebDev Sync",
+            ["webdevUrl"] = "WebDev URL",
+            ["webdevUser"] = "WebDev Username",
+            ["webdevPassword"] = "WebDev Password",
             ["server"] = "Enable Local Server Mode",
             ["sendHtml"] = "Send HTML",
             ["sendImage"] = "Send Image",
@@ -330,16 +336,45 @@ internal static class Program
         quickActions.Controls.Add(sendImageRef);
         quickActions.Controls.Add(sendFileRef);
 
+        var loadedWebDav = service.LoadWebDavSettings();
+        var webdevCheck = new CheckBox { Text = T(locale, "webdev"), AutoSize = true, Checked = loadedWebDav.Enabled };
+        var serverCheck = new CheckBox { Text = T(locale, "server"), AutoSize = true };
+        var webdavUrlText = new TextBox { Width = 320, Text = loadedWebDav.BaseUrl };
+        var webdavUserText = new TextBox { Width = 220, Text = loadedWebDav.Username };
+        var webdavPasswordText = new TextBox { Width = 220, Text = loadedWebDav.Password, UseSystemPasswordChar = true };
         var manualSync = new Button { Text = T(locale, "manualSync"), Width = 180, Height = 34 };
-        manualSync.Click += (_, _) =>
+        manualSync.Click += async (_, _) =>
         {
             var text = service.CaptureClipboard() ?? "empty";
-            service.ApplyRemoteText($"manual-sync:{text}");
+            if (webdevCheck.Checked)
+            {
+                service.SaveWebDavSettings(webdavUrlText.Text, webdavUserText.Text, webdavPasswordText.Text, true);
+                var uploaded = await service.UploadClipboardToWebDavAsync(text);
+                if (!uploaded)
+                {
+                    status.LastErrorMessage = "WebDev upload failed";
+                    errValue.Text = status.LastErrorMessage;
+                    history.Items.Insert(0, "[error] webdev · upload failed");
+                    return;
+                }
+
+                var remote = await service.DownloadClipboardFromWebDavAsync();
+                if (!string.IsNullOrWhiteSpace(remote))
+                {
+                    service.ApplyRemoteText(remote);
+                    history.Items.Insert(0, $"[in] text/plain · {remote}");
+                }
+            }
+            else
+            {
+                service.ApplyRemoteText($"manual-sync:{text}");
+                history.Items.Insert(0, $"[out] text/plain · {text}");
+            }
+
             status.SyncedOutCount += 1;
             status.SyncedInCount += 1;
             sentValue.Text = status.SyncedOutCount.ToString();
             recvValue.Text = status.SyncedInCount.ToString();
-            history.Items.Insert(0, $"[out] text/plain · {text}");
             errValue.Text = "None";
         };
         statusGrid.Controls.Add(quickActions, 0, 5);
@@ -502,7 +537,7 @@ internal static class Program
         {
             Dock = DockStyle.Fill,
             ColumnCount = 2,
-            RowCount = 8,
+            RowCount = 11,
             Padding = new Padding(16)
         };
         settingsGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 220));
@@ -530,8 +565,8 @@ internal static class Program
         pairingPolicyCombo.Items.AddRange(new object[] { "manual-approve", "auto-approve-invite" });
         pairingPolicyCombo.SelectedItem = "manual-approve";
 
-        var webdevCheck = new CheckBox { Text = T(locale, "webdev"), AutoSize = true };
-        var serverCheck = new CheckBox { Text = T(locale, "server"), AutoSize = true };
+        webdevCheck.Text = T(locale, "webdev");
+        serverCheck.Text = T(locale, "server");
 
         langCombo.SelectedIndexChanged += (_, _) =>
         {
@@ -568,7 +603,13 @@ internal static class Program
         settingsGrid.Controls.Add(new Label { Text = T(locale, "pairingPolicy"), AutoSize = true, Font = new Font("Segoe UI", 10, FontStyle.Bold) }, 0, 4);
         settingsGrid.Controls.Add(pairingPolicyCombo, 1, 4);
         settingsGrid.Controls.Add(webdevCheck, 1, 5);
-        settingsGrid.Controls.Add(serverCheck, 1, 6);
+        settingsGrid.Controls.Add(new Label { Text = T(locale, "webdevUrl"), AutoSize = true, Font = new Font("Segoe UI", 10, FontStyle.Bold) }, 0, 6);
+        settingsGrid.Controls.Add(webdavUrlText, 1, 6);
+        settingsGrid.Controls.Add(new Label { Text = T(locale, "webdevUser"), AutoSize = true, Font = new Font("Segoe UI", 10, FontStyle.Bold) }, 0, 7);
+        settingsGrid.Controls.Add(webdavUserText, 1, 7);
+        settingsGrid.Controls.Add(new Label { Text = T(locale, "webdevPassword"), AutoSize = true, Font = new Font("Segoe UI", 10, FontStyle.Bold) }, 0, 8);
+        settingsGrid.Controls.Add(webdavPasswordText, 1, 8);
+        settingsGrid.Controls.Add(serverCheck, 1, 9);
         settingsTab.Controls.Add(settingsGrid);
 
         root.Controls.Add(header, 0, 0);

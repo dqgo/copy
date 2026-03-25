@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct L10n {
     static let translations: [String: [String: String]] = [
@@ -23,6 +24,9 @@ struct L10n {
             "space": "工作空间",
             "pairingPolicy": "配对策略",
             "webdev": "WebDev 同步",
+            "webdevUrl": "WebDev 地址",
+            "webdevUser": "WebDev 用户名",
+            "webdevPassword": "WebDev 密码",
             "server": "本地服务模式",
             "manualSync": "手动同步",
             "noDevices": "暂无设备",
@@ -60,6 +64,9 @@ struct L10n {
             "space": "Space",
             "pairingPolicy": "Pairing Policy",
             "webdev": "WebDev Sync",
+            "webdevUrl": "WebDev URL",
+            "webdevUser": "WebDev Username",
+            "webdevPassword": "WebDev Password",
             "server": "Local Server Mode",
             "manualSync": "Manual Sync",
             "noDevices": "No devices",
@@ -110,6 +117,9 @@ private struct SettingsModel {
     var syncMode: String
     var spaceId: String
     var webDevEnabled: Bool
+    var webDevBaseUrl: String
+    var webDevUsername: String
+    var webDevPassword: String
     var localServerEnabled: Bool
     var pairingPolicy: String
 }
@@ -160,6 +170,9 @@ struct IOSDashboardView: View {
         syncMode: "manual",
         spaceId: "default",
         webDevEnabled: false,
+        webDevBaseUrl: "",
+        webDevUsername: "",
+        webDevPassword: "",
         localServerEnabled: false,
         pairingPolicy: "manual-approve"
     )
@@ -221,6 +234,11 @@ struct IOSDashboardView: View {
             if systemColorScheme == .dark {
                 settings.darkMode = true
             }
+            let store = SecureStoreAdapter()
+            settings.webDevEnabled = store.get("webdav_enabled") == "1"
+            settings.webDevBaseUrl = store.get("webdav_base_url") ?? ""
+            settings.webDevUsername = store.get("webdav_username") ?? ""
+            settings.webDevPassword = store.get("webdav_password") ?? ""
         }
         .alert(confirmDialogTitle, isPresented: $showConfirmDialog) {
             Button(L10n.get(settings.language, "cancel"), role: .cancel) { }
@@ -242,10 +260,9 @@ struct IOSDashboardView: View {
                 VStack(spacing: 14) {
                     statusCard
                     Button(L10n.get(settings.language, "manualSync")) {
-                        status.syncedOutCount += 1
-                        status.syncedInCount += 1
-                        status.lastErrorMessage = nil
-                        history.insert(HistoryItem(direction: "out", contentType: "text/plain", preview: "manual sync", at: "now"), at: 0)
+                        Task {
+                            await performManualSync()
+                        }
                     }
                     .buttonStyle(.borderedProminent)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -403,6 +420,13 @@ struct IOSDashboardView: View {
                 row(L10n.get(settings.language, "pairingPolicy"), settings.pairingPolicy)
                 Toggle(L10n.get(settings.language, "darkMode"), isOn: $settings.darkMode)
                 Toggle(L10n.get(settings.language, "webdev"), isOn: $settings.webDevEnabled)
+                TextField(L10n.get(settings.language, "webdevUrl"), text: $settings.webDevBaseUrl)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled(true)
+                TextField(L10n.get(settings.language, "webdevUser"), text: $settings.webDevUsername)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled(true)
+                SecureField(L10n.get(settings.language, "webdevPassword"), text: $settings.webDevPassword)
                 Toggle(L10n.get(settings.language, "server"), isOn: $settings.localServerEnabled)
             }
             .navigationTitle(L10n.get(settings.language, "settings"))
@@ -415,6 +439,93 @@ struct IOSDashboardView: View {
             Spacer()
             Text(value)
         }
+    }
+
+    private func performManualSync() async {
+        if settings.webDevEnabled && !settings.webDevBaseUrl.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            let store = SecureStoreAdapter()
+            store.set("webdav_enabled", value: settings.webDevEnabled ? "1" : "0")
+            store.set("webdav_base_url", value: settings.webDevBaseUrl)
+            store.set("webdav_username", value: settings.webDevUsername)
+            store.set("webdav_password", value: settings.webDevPassword)
+
+            let localText = UIPasteboard.general.string ?? ""
+            let uploadOk = await uploadToWebDav(text: localText)
+            if !uploadOk {
+                await MainActor.run {
+                    status.lastErrorMessage = "WebDev upload failed"
+                    errorMessage = "WebDev upload failed"
+                }
+                return
+            }
+
+            let remoteText = await downloadFromWebDav()
+            await MainActor.run {
+                status.syncedOutCount += 1
+                status.syncedInCount += 1
+                if let remoteText, !remoteText.isEmpty {
+                    UIPasteboard.general.string = remoteText
+                    history.insert(HistoryItem(direction: "in", contentType: "text/plain", preview: remoteText, at: "now"), at: 0)
+                    status.lastErrorMessage = nil
+                    errorMessage = nil
+                } else {
+                    history.insert(HistoryItem(direction: "out", contentType: "text/plain", preview: localText, at: "now"), at: 0)
+                    status.lastErrorMessage = nil
+                    errorMessage = nil
+                }
+            }
+            return
+        }
+
+        await MainActor.run {
+            status.syncedOutCount += 1
+            status.syncedInCount += 1
+            status.lastErrorMessage = nil
+            errorMessage = nil
+            history.insert(HistoryItem(direction: "out", contentType: "text/plain", preview: "manual sync", at: "now"), at: 0)
+        }
+    }
+
+    private func uploadToWebDav(text: String) async -> Bool {
+        let base = settings.webDevBaseUrl.hasSuffix("/") ? settings.webDevBaseUrl : settings.webDevBaseUrl + "/"
+        guard let url = URL(string: base + "clipboard-sync.txt") else { return false }
+        var request = URLRequest(url: url)
+        request.httpMethod = "PUT"
+        request.httpBody = text.data(using: .utf8)
+        request.setValue("text/plain; charset=utf-8", forHTTPHeaderField: "Content-Type")
+        applyBasicAuth(&request)
+
+        do {
+            let (_, response) = try await URLSession.shared.data(for: request)
+            if let http = response as? HTTPURLResponse {
+                return (200...299).contains(http.statusCode)
+            }
+            return false
+        } catch {
+            return false
+        }
+    }
+
+    private func downloadFromWebDav() async -> String? {
+        let base = settings.webDevBaseUrl.hasSuffix("/") ? settings.webDevBaseUrl : settings.webDevBaseUrl + "/"
+        guard let url = URL(string: base + "clipboard-sync.txt") else { return nil }
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        applyBasicAuth(&request)
+
+        do {
+            let (data, response) = try await URLSession.shared.data(for: request)
+            guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else { return nil }
+            return String(data: data, encoding: .utf8)
+        } catch {
+            return nil
+        }
+    }
+
+    private func applyBasicAuth(_ request: inout URLRequest) {
+        guard !settings.webDevUsername.isEmpty else { return }
+        let raw = Data("\(settings.webDevUsername):\(settings.webDevPassword)".utf8).base64EncodedString()
+        request.setValue("Basic \(raw)", forHTTPHeaderField: "Authorization")
     }
 
     @ViewBuilder
