@@ -4,6 +4,7 @@ using System.Drawing;
 using System.Windows.Forms;
 using System.Collections.Generic;
 using System;
+using Microsoft.Win32;
 
 internal sealed class MemoryClipboardReader : IClipboardReader
 {
@@ -355,12 +356,23 @@ internal static class Program
         {
             if (deviceList.SelectedItem is DeviceItem selected)
             {
-                deviceList.Items.Remove(selected);
-                status.RejectedEventCount += 1;
-                rejValue.Text = status.RejectedEventCount.ToString();
-                status.LastErrorMessage = $"Revoked device: {selected.DeviceId}";
-                errValue.Text = status.LastErrorMessage;
-                history.Items.Insert(0, $"[event] revoke · {selected.DeviceId}");
+                // Show confirmation dialog
+                var dialogResult = MessageBox.Show(
+                    T(locale, "confirmRevoke"),
+                    T(locale, "revoke"),
+                    MessageBoxButtons.OKCancel,
+                    MessageBoxIcon.Question
+                );
+                
+                if (dialogResult == DialogResult.OK)
+                {
+                    deviceList.Items.Remove(selected);
+                    status.RejectedEventCount += 1;
+                    rejValue.Text = status.RejectedEventCount.ToString();
+                    status.LastErrorMessage = $"Revoked device: {selected.DeviceId}";
+                    errValue.Text = status.LastErrorMessage;
+                    history.Items.Insert(0, $"[event] revoke · {selected.DeviceId}");
+                }
             }
         };
         deviceGrid.Controls.Add(deviceList, 0, 0);
@@ -397,10 +409,21 @@ internal static class Program
         {
             if (pairingList.SelectedItem is PairingRequestItem selected)
             {
-                pairingList.Items.Remove(selected);
-                status.PendingPairingCount = Math.Max(0, status.PendingPairingCount - 1);
-                pendingValue.Text = status.PendingPairingCount.ToString();
-                history.Items.Insert(0, $"[event] pairing · rejected {selected.DeviceName}");
+                // Show confirmation dialog
+                var dialogResult = MessageBox.Show(
+                    T(locale, "confirmReject"),
+                    T(locale, "reject"),
+                    MessageBoxButtons.OKCancel,
+                    MessageBoxIcon.Question
+                );
+                
+                if (dialogResult == DialogResult.OK)
+                {
+                    pairingList.Items.Remove(selected);
+                    status.PendingPairingCount = Math.Max(0, status.PendingPairingCount - 1);
+                    pendingValue.Text = status.PendingPairingCount.ToString();
+                    history.Items.Insert(0, $"[event] pairing · rejected {selected.DeviceName}");
+                }
             }
         };
 
@@ -428,7 +451,9 @@ internal static class Program
 
         var themeCombo = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 220 };
         themeCombo.Items.AddRange(new object[] { "system", "light", "dark" });
-        themeCombo.SelectedItem = "system";
+        // Auto-detect system theme
+        var systemDarkMode = DetectSystemDarkMode();
+        themeCombo.SelectedItem = systemDarkMode ? "dark" : "light";
 
         var modeCombo = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, Width = 220 };
         modeCombo.Items.AddRange(new object[] { "manual", "auto" });
@@ -465,6 +490,9 @@ internal static class Program
                 ApplyTheme(form, false);
             }
         };
+
+        // Apply system-detected theme on startup
+        ApplyTheme(form, systemDarkMode);
 
         settingsGrid.Controls.Add(new Label { Text = T(locale, "language"), AutoSize = true, Font = new Font("Segoe UI", 10, FontStyle.Bold) }, 0, 0);
         settingsGrid.Controls.Add(langCombo, 1, 0);
@@ -596,5 +624,25 @@ internal static class Program
         {
             ApplyThemeRecursive(child, bg, fg);
         }
+    }
+
+    private static bool DetectSystemDarkMode()
+    {
+        try
+        {
+            using (var key = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize"))
+            {
+                if (key != null)
+                {
+                    var value = key.GetValue("AppsUseLightTheme", 1);
+                    return value != null && (int)value == 0;
+                }
+            }
+        }
+        catch
+        {
+            // If registry access fails, default to light mode
+        }
+        return false;
     }
 }
