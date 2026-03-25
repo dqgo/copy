@@ -5,6 +5,8 @@ using System.Drawing.Drawing2D;
 using System.Windows.Forms;
 using System.Collections.Generic;
 using System;
+using System.Linq;
+using System.Text.Json;
 using Microsoft.Win32;
 
 internal sealed class MemoryClipboardReader : IClipboardReader
@@ -213,11 +215,26 @@ internal static class Program
         };
 
         var trustedDevices = new List<DeviceItem>();
+        trustedDevices.AddRange(LoadDevices(store));
 
         var history = new ListBox { Dock = DockStyle.Fill };
-        history.Items.Add("[info] workspace key loaded");
+        var savedHistory = LoadHistory(store);
+        if (savedHistory.Count == 0)
+        {
+            history.Items.Add("[info] workspace key loaded");
+        }
+        else
+        {
+            foreach (var item in savedHistory)
+            {
+                history.Items.Add(item);
+            }
+        }
 
         var pairingRequests = new List<PairingRequestItem>();
+        pairingRequests.AddRange(LoadPairingRequests(store));
+        status.TrustedDeviceCount = trustedDevices.Count;
+        status.PendingPairingCount = pairingRequests.Count;
 
         var locale = "zh-CN";
 
@@ -709,6 +726,7 @@ internal static class Program
             }
             else
             {
+                SaveRuntimeSnapshots(store, trustedDevices, pairingRequests, history);
                 notifyIcon.Visible = false;
                 notifyIcon.Dispose();
             }
@@ -716,6 +734,76 @@ internal static class Program
 
         Application.Run(form);
         return 0;
+    }
+
+    private static List<DeviceItem> LoadDevices(ISecureStore store)
+    {
+        var raw = store.Get("trusted_devices_json");
+        if (string.IsNullOrWhiteSpace(raw)) return new List<DeviceItem>();
+        try
+        {
+            var payload = JsonSerializer.Deserialize<List<DeviceSnapshot>>(raw) ?? new List<DeviceSnapshot>();
+            return payload.Select(x => new DeviceItem(x.DeviceId ?? string.Empty, x.Name ?? string.Empty, x.LastSeen ?? string.Empty)).ToList();
+        }
+        catch
+        {
+            return new List<DeviceItem>();
+        }
+    }
+
+    private static List<PairingRequestItem> LoadPairingRequests(ISecureStore store)
+    {
+        var raw = store.Get("pairing_requests_json");
+        if (string.IsNullOrWhiteSpace(raw)) return new List<PairingRequestItem>();
+        try
+        {
+            var payload = JsonSerializer.Deserialize<List<PairingSnapshot>>(raw) ?? new List<PairingSnapshot>();
+            return payload.Select(x => new PairingRequestItem(x.RequestId ?? string.Empty, x.DeviceName ?? string.Empty, x.Platform ?? string.Empty, x.RequestedAt ?? string.Empty)).ToList();
+        }
+        catch
+        {
+            return new List<PairingRequestItem>();
+        }
+    }
+
+    private static List<string> LoadHistory(ISecureStore store)
+    {
+        var raw = store.Get("history_items_json");
+        if (string.IsNullOrWhiteSpace(raw)) return new List<string>();
+        try
+        {
+            return JsonSerializer.Deserialize<List<string>>(raw) ?? new List<string>();
+        }
+        catch
+        {
+            return new List<string>();
+        }
+    }
+
+    private static void SaveRuntimeSnapshots(ISecureStore store, List<DeviceItem> devices, List<PairingRequestItem> pairingRequests, ListBox history)
+    {
+        var devicesPayload = devices.Select(x => new DeviceSnapshot { DeviceId = x.DeviceId, Name = x.Name, LastSeen = x.LastSeen }).ToList();
+        var pairingPayload = pairingRequests.Select(x => new PairingSnapshot { RequestId = x.RequestId, DeviceName = x.DeviceName, Platform = x.Platform, RequestedAt = x.RequestedAt }).ToList();
+        var historyPayload = history.Items.Cast<object>().Select(x => x?.ToString() ?? string.Empty).Take(300).ToList();
+
+        store.Set("trusted_devices_json", JsonSerializer.Serialize(devicesPayload));
+        store.Set("pairing_requests_json", JsonSerializer.Serialize(pairingPayload));
+        store.Set("history_items_json", JsonSerializer.Serialize(historyPayload));
+    }
+
+    private sealed class DeviceSnapshot
+    {
+        public string? DeviceId { get; set; }
+        public string? Name { get; set; }
+        public string? LastSeen { get; set; }
+    }
+
+    private sealed class PairingSnapshot
+    {
+        public string? RequestId { get; set; }
+        public string? DeviceName { get; set; }
+        public string? Platform { get; set; }
+        public string? RequestedAt { get; set; }
     }
 
     private static string T(string locale, string key)

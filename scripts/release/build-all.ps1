@@ -75,23 +75,37 @@ if (Test-Path "apps/android/gradlew.bat") {
   Write-Host "[info] android gradle wrapper not found, skipped packaging"
 }
 
-# iOS / macOS package
-if ($IsMacOS) {
-  if (-not (Get-Command xcodebuild -ErrorAction SilentlyContinue)) {
-    Write-Host "[blocker] xcodebuild not found; apple package build skipped"
-    Write-Host "Release script finished"
-    Pop-Location
-    exit 0
-  }
+# iOS / macOS package (strict: no skip for full release)
+if (-not $IsMacOS) {
+  Write-Host "[blocker] full release requires macOS to build iOS/macOS packages"
+  Pop-Location
+  exit 2
+}
 
-  if (Test-Path "apps/ios") {
-    Write-Host "[info] run xcodebuild archive for iOS project when xcodeproj exists"
-  }
-  if (Test-Path "apps/macos") {
-    Write-Host "[info] run xcodebuild archive for macOS project when xcodeproj exists"
-  }
-} else {
-  Write-Host "[info] non-macOS environment, iOS/macOS packaging skipped"
+if (-not (Get-Command xcodebuild -ErrorAction SilentlyContinue)) {
+  Write-Host "[blocker] xcodebuild not found"
+  Pop-Location
+  exit 3
+}
+
+$iosProject = Get-ChildItem -Path "apps/ios" -Filter "*.xcodeproj" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+if (-not $iosProject) {
+  Write-Host "[blocker] iOS xcodeproj not found"
+  Pop-Location
+  exit 4
+}
+
+$macProject = Get-ChildItem -Path "apps/macos" -Filter "*.xcodeproj" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+if (-not $macProject) {
+  Write-Host "[blocker] macOS xcodeproj not found"
+  Pop-Location
+  exit 5
+}
+
+bash "scripts/release/apple-build.sh"
+if ($LASTEXITCODE -ne 0) {
+  Pop-Location
+  exit $LASTEXITCODE
 }
 
 Write-Host "Release script finished"

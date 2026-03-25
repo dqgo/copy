@@ -45,6 +45,7 @@ import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.isSystemInDarkTheme
 import androidx.compose.runtime.mutableStateOf
@@ -67,6 +68,8 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.json.JSONArray
+import org.json.JSONObject
 
 object AppStrings {
     private val translations = mapOf(
@@ -243,6 +246,9 @@ class MainActivity : ComponentActivity() {
 private fun ClipboardSyncAndroidApp() {
     val context = LocalContext.current
     val prefs = remember { context.getSharedPreferences("clipboardsync_settings", Context.MODE_PRIVATE) }
+    val initialDevices = remember { decodeTrustedDevices(prefs.getString("trusted_devices_json", null)) }
+    val initialHistory = remember { decodeHistoryItems(prefs.getString("history_items_json", null)) }
+    val initialPairing = remember { decodePairingRequests(prefs.getString("pairing_requests_json", null)) }
     val systemDarkTheme = isSystemInDarkTheme()
     var selectedTab by remember { mutableStateOf(0) }
     var deviceQuery by remember { mutableStateOf("") }
@@ -257,12 +263,12 @@ private fun ClipboardSyncAndroidApp() {
                     syncedOutCount = 0,
                     syncedInCount = 0,
                     rejectedEventCount = 0,
-                    trustedDeviceCount = 0,
-                    pendingPairingCount = 0,
+                    trustedDeviceCount = initialDevices.size,
+                    pendingPairingCount = initialPairing.size,
                     lastErrorMessage = null
                 ),
-                devices = emptyList(),
-                history = emptyList(),
+                devices = initialDevices,
+                history = initialHistory,
                 settings = SettingsUi(
                     language = prefs.getString("language", "zh-CN") ?: "zh-CN",
                     darkMode = prefs.getBoolean("dark_mode", systemDarkTheme),
@@ -275,7 +281,7 @@ private fun ClipboardSyncAndroidApp() {
                     localServerEnabled = prefs.getBoolean("local_server_enabled", false),
                     pairingPolicy = prefs.getString("pairing_policy", "manual-approve") ?: "manual-approve"
                 ),
-                pairingRequests = emptyList()
+                pairingRequests = initialPairing
             )
         )
     }
@@ -292,6 +298,14 @@ private fun ClipboardSyncAndroidApp() {
     val filteredPairing = state.pairingRequests.filter {
         val q = pairingQuery.trim().lowercase()
         q.isEmpty() || it.displayName.lowercase().contains(q) || it.platform.lowercase().contains(q)
+    }
+
+    LaunchedEffect(state.devices, state.history, state.pairingRequests) {
+        prefs.edit()
+            .putString("trusted_devices_json", encodeTrustedDevices(state.devices))
+            .putString("history_items_json", encodeHistoryItems(state.history))
+            .putString("pairing_requests_json", encodePairingRequests(state.pairingRequests))
+            .apply()
     }
 
     MaterialTheme {
@@ -816,6 +830,83 @@ private fun EmptyStateCard(title: String, message: String, actionLabel: String? 
                 Button(onClick = onAction) { Text(actionLabel) }
             }
         }
+    }
+}
+
+private fun encodeTrustedDevices(list: List<TrustedDeviceUi>): String {
+    val array = JSONArray()
+    list.forEach {
+        array.put(JSONObject().put("deviceId", it.deviceId).put("displayName", it.displayName).put("lastSeen", it.lastSeen))
+    }
+    return array.toString()
+}
+
+private fun decodeTrustedDevices(raw: String?): List<TrustedDeviceUi> {
+    if (raw.isNullOrBlank()) return emptyList()
+    return try {
+        val array = JSONArray(raw)
+        List(array.length()) { index ->
+            val o = array.getJSONObject(index)
+            TrustedDeviceUi(
+                deviceId = o.optString("deviceId"),
+                displayName = o.optString("displayName"),
+                lastSeen = o.optString("lastSeen")
+            )
+        }
+    } catch (_: Exception) {
+        emptyList()
+    }
+}
+
+private fun encodeHistoryItems(list: List<HistoryUi>): String {
+    val array = JSONArray()
+    list.forEach {
+        array.put(JSONObject().put("direction", it.direction).put("contentType", it.contentType).put("preview", it.preview).put("at", it.at))
+    }
+    return array.toString()
+}
+
+private fun decodeHistoryItems(raw: String?): List<HistoryUi> {
+    if (raw.isNullOrBlank()) return emptyList()
+    return try {
+        val array = JSONArray(raw)
+        List(array.length()) { index ->
+            val o = array.getJSONObject(index)
+            HistoryUi(
+                direction = o.optString("direction"),
+                contentType = o.optString("contentType"),
+                preview = o.optString("preview"),
+                at = o.optString("at")
+            )
+        }
+    } catch (_: Exception) {
+        emptyList()
+    }
+}
+
+private fun encodePairingRequests(list: List<PairingRequestUi>): String {
+    val array = JSONArray()
+    list.forEach {
+        array.put(JSONObject().put("requestId", it.requestId).put("displayName", it.displayName).put("platform", it.platform).put("at", it.at))
+    }
+    return array.toString()
+}
+
+private fun decodePairingRequests(raw: String?): List<PairingRequestUi> {
+    if (raw.isNullOrBlank()) return emptyList()
+    return try {
+        val array = JSONArray(raw)
+        List(array.length()) { index ->
+            val o = array.getJSONObject(index)
+            PairingRequestUi(
+                requestId = o.optString("requestId"),
+                displayName = o.optString("displayName"),
+                platform = o.optString("platform"),
+                at = o.optString("at")
+            )
+        }
+    } catch (_: Exception) {
+        emptyList()
     }
 }
 

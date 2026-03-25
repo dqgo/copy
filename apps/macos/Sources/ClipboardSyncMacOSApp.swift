@@ -28,7 +28,7 @@ struct ClipboardSyncMacOSApp: App {
                     if newPhase == .background {
                         let content = UNMutableNotificationContent()
                         content.title = "Clipboard Sync"
-                        content.body = "Running in background from menu bar."
+                        content.body = "App is in menu bar. Open app windows to run full sync operations."
                         let request = UNNotificationRequest(
                             identifier: "clipboardsync.macos.background",
                             content: content,

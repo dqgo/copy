@@ -96,21 +96,21 @@ struct L10n {
     }
 }
 
-private struct TrustedDevice: Identifiable {
+private struct TrustedDevice: Identifiable, Codable, Equatable {
     let id: String
     let name: String
     let lastSeen: String
 }
 
-private struct PairingRequest: Identifiable {
+private struct PairingRequest: Identifiable, Codable, Equatable {
     let id: String
     let deviceName: String
     let platform: String
     let requestedAt: String
 }
 
-private struct HistoryItem: Identifiable {
-    let id = UUID()
+private struct HistoryItem: Identifiable, Codable, Equatable {
+    var id = UUID()
     let direction: String
     let contentType: String
     let preview: String
@@ -237,6 +237,11 @@ struct IOSDashboardView: View {
             settings.webDevUsername = store.get("webdav_username") ?? ""
             settings.webDevPassword = store.get("webdav_password") ?? ""
             settings.localServerEnabled = store.get("local_server_enabled") == "1"
+            trustedDevices = decodeList(store.get("trusted_devices_json"), as: [TrustedDevice].self)
+            history = decodeList(store.get("history_items_json"), as: [HistoryItem].self)
+            pairingRequests = decodeList(store.get("pairing_requests_json"), as: [PairingRequest].self)
+            status.trustedDeviceCount = trustedDevices.count
+            status.pendingPairingCount = pairingRequests.count
         }
         .onChange(of: settings.webDevEnabled) { _, newValue in
             let store = SecureStoreAdapter()
@@ -257,6 +262,17 @@ struct IOSDashboardView: View {
         .onChange(of: settings.localServerEnabled) { _, newValue in
             let store = SecureStoreAdapter()
             store.set("local_server_enabled", value: newValue ? "1" : "0")
+        }
+        .onChange(of: trustedDevices) { _, newValue in
+            persistList("trusted_devices_json", value: newValue)
+            status.trustedDeviceCount = newValue.count
+        }
+        .onChange(of: history) { _, newValue in
+            persistList("history_items_json", value: newValue)
+        }
+        .onChange(of: pairingRequests) { _, newValue in
+            persistList("pairing_requests_json", value: newValue)
+            status.pendingPairingCount = newValue.count
         }
         .alert(confirmDialogTitle, isPresented: $showConfirmDialog) {
             Button(L10n.get(settings.language, "cancel"), role: .cancel) { }
@@ -616,6 +632,22 @@ struct IOSDashboardView: View {
         guard !settings.webDevUsername.isEmpty else { return }
         let raw = Data("\(settings.webDevUsername):\(settings.webDevPassword)".utf8).base64EncodedString()
         request.setValue("Basic \(raw)", forHTTPHeaderField: "Authorization")
+    }
+
+    private func persistList<T: Codable>(_ key: String, value: T) {
+        let store = SecureStoreAdapter()
+        guard let data = try? JSONEncoder().encode(value), let json = String(data: data, encoding: .utf8) else { return }
+        store.set(key, value: json)
+    }
+
+    private func decodeList<T: Codable>(_ raw: String?, as type: T.Type) -> T {
+        guard let raw, let data = raw.data(using: .utf8), let decoded = try? JSONDecoder().decode(type, from: data) else {
+            if type == [TrustedDevice].self { return [] as! T }
+            if type == [HistoryItem].self { return [] as! T }
+            if type == [PairingRequest].self { return [] as! T }
+            fatalError("Unsupported decode type")
+        }
+        return decoded
     }
 
     @ViewBuilder

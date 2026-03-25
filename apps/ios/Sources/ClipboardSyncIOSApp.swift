@@ -16,7 +16,7 @@ struct ClipboardSyncIOSApp: App {
                     if newPhase == .background {
                         let content = UNMutableNotificationContent()
                         content.title = "Clipboard Sync"
-                        content.body = "Background sync monitoring is active."
+                        content.body = "iOS limits background clipboard sync. Open app to run full sync."
                         content.sound = .default
 
                         let request = UNNotificationRequest(

@@ -112,4 +112,4 @@ jobs:
             artifacts/macos/**/*.app
             artifacts/macos/**/*.pkg
             artifacts/macos/**/*.dmg
-          if-no-files-found: warn
+          if-no-files-found: error

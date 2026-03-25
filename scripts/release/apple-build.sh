@@ -8,7 +8,7 @@ mkdir -p artifacts/ios artifacts/macos
 
 if ! command -v xcodebuild >/dev/null 2>&1; then
   echo "[blocker] xcodebuild not found"
-  exit 0
+  exit 2
 fi
 
 build_ios() {
@@ -18,8 +18,8 @@ build_ios() {
   fi
 
   if [ -z "$project_path" ]; then
-    echo "[info] iOS xcodeproj not found, skipped"
-    return
+    echo "[blocker] iOS xcodeproj not found"
+    return 11
   fi
 
   local scheme="${IOS_SCHEME:-ClipboardSynciOS}"
@@ -58,8 +58,8 @@ build_macos() {
   fi
 
   if [ -z "$project_path" ]; then
-    echo "[info] macOS xcodeproj not found, skipped"
-    return
+    echo "[blocker] macOS xcodeproj not found"
+    return 12
   fi
 
   local scheme="${MACOS_SCHEME:-ClipboardSyncMac}"

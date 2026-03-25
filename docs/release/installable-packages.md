@@ -28,4 +28,4 @@
 
 - Script: scripts/release/build-all.ps1
 - Root command: npm run release:all
-- The script reports blockers explicitly when required toolchains are missing.
+- The script is strict for full release: missing macOS/Xcode/xcodeproj now fails the run instead of skipping Apple packaging.
