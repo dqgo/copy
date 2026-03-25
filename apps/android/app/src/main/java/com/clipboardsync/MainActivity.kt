@@ -15,6 +15,7 @@ import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -53,6 +54,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -540,6 +544,7 @@ private fun StatusTab(
 ) {
     Card(modifier = Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f))) {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            PlatformHeroGraphic()
             StatusRow(AppStrings.get(language, "connection"), status.connectionState.name)
             StatusRow(AppStrings.get(language, "sent"), status.syncedOutCount.toString())
             StatusRow(AppStrings.get(language, "received"), status.syncedInCount.toString())
@@ -562,6 +567,42 @@ private fun StatusTab(
                     Text(AppStrings.get(language, "sendFile"))
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun PlatformHeroGraphic() {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF0B2233).copy(alpha = 0.92f))
+    ) {
+        Canvas(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(112.dp)
+        ) {
+            drawRoundRect(
+                color = Color(0xFF1BB5A7),
+                topLeft = Offset(16f, 16f),
+                size = Size(size.width - 32f, size.height - 32f),
+                cornerRadius = androidx.compose.ui.geometry.CornerRadius(24f, 24f)
+            )
+            drawRoundRect(
+                color = Color(0xFF0A355A),
+                topLeft = Offset(36f, 26f),
+                size = Size(size.width * 0.35f, size.height * 0.56f),
+                cornerRadius = androidx.compose.ui.geometry.CornerRadius(20f, 20f)
+            )
+            drawRoundRect(
+                color = Color.White,
+                topLeft = Offset(size.width * 0.56f, 34f),
+                size = Size(size.width * 0.28f, size.height * 0.42f),
+                cornerRadius = androidx.compose.ui.geometry.CornerRadius(14f, 14f),
+                style = Stroke(width = 6f)
+            )
+            drawCircle(color = Color(0xFFFFC857), radius = 11f, center = Offset(size.width * 0.82f, size.height * 0.68f))
+            drawCircle(color = Color(0xFFFF6B6B), radius = 8f, center = Offset(size.width * 0.72f, size.height * 0.72f))
         }
     }
 }

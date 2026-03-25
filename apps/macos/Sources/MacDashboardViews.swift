@@ -131,6 +131,7 @@ struct MacStatusMenuView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
+            platformHero
             Text("Clipboard Sync Status")
                 .font(.headline)
             Label(status.connectionState.rawValue, systemImage: status.connectionState == .connected ? "checkmark.circle" : "xmark.circle")
@@ -176,6 +177,30 @@ struct MacStatusMenuView: View {
             settings.webDevUsername = store.get("webdav_username") ?? ""
             settings.webDevPassword = store.get("webdav_password") ?? ""
         }
+    }
+
+    private var platformHero: some View {
+        Canvas { context, size in
+            let bg = Path(roundedRect: CGRect(x: 0, y: 0, width: size.width, height: size.height), cornerSize: CGSize(width: 18, height: 18))
+            context.fill(bg, with: .linearGradient(Gradient(colors: [Color(red: 0.07, green: 0.2, blue: 0.35), Color(red: 0.14, green: 0.45, blue: 0.42)]), startPoint: .zero, endPoint: CGPoint(x: size.width, y: size.height)))
+
+            let card = Path(roundedRect: CGRect(x: 16, y: 16, width: size.width * 0.36, height: size.height * 0.6), cornerSize: CGSize(width: 14, height: 14))
+            context.fill(card, with: .color(Color.white.opacity(0.9)))
+
+            let board = Path(roundedRect: CGRect(x: size.width * 0.58, y: 18, width: size.width * 0.24, height: size.height * 0.52), cornerSize: CGSize(width: 10, height: 10))
+            context.stroke(board, with: .color(Color(red: 0.98, green: 0.76, blue: 0.3)), lineWidth: 3)
+            context.fill(Path(ellipseIn: CGRect(x: size.width * 0.68, y: size.height * 0.62, width: 12, height: 12)), with: .color(Color(red: 1, green: 0.43, blue: 0.39)))
+        }
+        .frame(height: 86)
+        .overlay(alignment: .bottomLeading) {
+            Text("Clipboard Sync")
+                .font(.caption.weight(.semibold))
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(.regularMaterial, in: Capsule())
+                .padding(8)
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
     }
 
     private func performManualSync() async {

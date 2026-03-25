@@ -264,6 +264,7 @@ struct IOSDashboardView: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 14) {
+                    platformHeroView
                     statusCard
                     Button(L10n.get(settings.language, "manualSync")) {
                         Task {
@@ -449,6 +450,30 @@ struct IOSDashboardView: View {
             Text(label)
             Spacer()
             Text(value)
+        }
+    }
+
+    private var platformHeroView: some View {
+        Canvas { context, size in
+            let bg = Path(roundedRect: CGRect(x: 0, y: 0, width: size.width, height: size.height), cornerSize: CGSize(width: 20, height: 20))
+            context.fill(bg, with: .linearGradient(Gradient(colors: [Color(red: 0.09, green: 0.34, blue: 0.66), Color(red: 0.12, green: 0.68, blue: 0.67)]), startPoint: .zero, endPoint: CGPoint(x: size.width, y: size.height)))
+
+            let phone = Path(roundedRect: CGRect(x: 18, y: 14, width: size.width * 0.33, height: size.height * 0.68), cornerSize: CGSize(width: 16, height: 16))
+            context.fill(phone, with: .color(Color.white.opacity(0.92)))
+
+            var clip = Path(roundedRect: CGRect(x: size.width * 0.56, y: 18, width: size.width * 0.26, height: size.height * 0.54), cornerSize: CGSize(width: 12, height: 12))
+            clip.addPath(Path(ellipseIn: CGRect(x: size.width * 0.67, y: size.height * 0.58, width: 14, height: 14)))
+            context.stroke(clip, with: .color(Color(red: 0.98, green: 0.78, blue: 0.35)), lineWidth: 3)
+        }
+        .frame(height: 106)
+        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .overlay(alignment: .bottomLeading) {
+            Text("Clipboard Sync")
+                .font(.caption.weight(.semibold))
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(.ultraThinMaterial, in: Capsule())
+                .padding(10)
         }
     }
 

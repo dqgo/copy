@@ -1,6 +1,7 @@
 namespace ClipboardSync.Windows;
 
 using System.Drawing;
+using System.Drawing.Drawing2D;
 using System.Windows.Forms;
 using System.Collections.Generic;
 using System;
@@ -238,6 +239,8 @@ internal static class Program
             Height = 640,
             StartPosition = FormStartPosition.CenterScreen
         };
+        using var appBadge = DrawPlatformBadge(48, 48);
+        form.Icon = Icon.FromHandle(appBadge.GetHicon());
 
         var root = new TableLayoutPanel
         {
@@ -253,9 +256,12 @@ internal static class Program
         {
             Text = "Clipboard Sync · Windows MVP",
             Font = new Font("Segoe UI", 13, FontStyle.Bold),
-            Height = 36,
+            Height = 54,
             Dock = DockStyle.Top
         };
+        header.Image = DrawPlatformBadge(36, 36);
+        header.ImageAlign = ContentAlignment.MiddleLeft;
+        header.Padding = new Padding(8, 0, 0, 0);
 
         var tabs = new TabControl { Dock = DockStyle.Fill };
         var statusTab = new TabPage(T(locale, "status"));
@@ -771,5 +777,46 @@ internal static class Program
             // If registry access fails, default to light mode
         }
         return false;
+    }
+
+    private static Bitmap DrawPlatformBadge(int width, int height)
+    {
+        var bmp = new Bitmap(width, height);
+        using var g = Graphics.FromImage(bmp);
+        g.SmoothingMode = SmoothingMode.AntiAlias;
+
+        using (var bgBrush = new LinearGradientBrush(new Rectangle(0, 0, width, height), Color.FromArgb(21, 82, 139), Color.FromArgb(31, 165, 142), 42f))
+        {
+            using var bgPath = CreateRoundedRectPath(0, 0, width - 1, height - 1, 10f);
+            g.FillPath(bgBrush, bgPath);
+        }
+
+        using var panelBrush = new SolidBrush(Color.FromArgb(235, 245, 255));
+        using (var panelPath = CreateRoundedRectPath(width / 6f, height / 5f, width * 0.34f, height * 0.56f, 7f))
+        {
+            g.FillPath(panelBrush, panelPath);
+        }
+
+        using var clipPen = new Pen(Color.FromArgb(252, 193, 82), 2.6f);
+        using (var clipPath = CreateRoundedRectPath(width * 0.57f, height * 0.23f, width * 0.24f, height * 0.46f, 6f))
+        {
+            g.DrawPath(clipPen, clipPath);
+        }
+        using var dotBrush = new SolidBrush(Color.FromArgb(247, 102, 94));
+        g.FillEllipse(dotBrush, width * 0.68f, height * 0.63f, width * 0.1f, height * 0.1f);
+
+        return bmp;
+    }
+
+    private static GraphicsPath CreateRoundedRectPath(float x, float y, float width, float height, float radius)
+    {
+        var path = new GraphicsPath();
+        var d = radius * 2f;
+        path.AddArc(x, y, d, d, 180, 90);
+        path.AddArc(x + width - d, y, d, d, 270, 90);
+        path.AddArc(x + width - d, y + height - d, d, d, 0, 90);
+        path.AddArc(x, y + height - d, d, d, 90, 90);
+        path.CloseFigure();
+        return path;
     }
 }
