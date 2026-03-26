@@ -1,0 +1,227 @@
+name: Release Packages
+
+on:
+  workflow_dispatch:
+    inputs:
+      createReleaseBundle:
+        description: "Create release bundle artifacts"
+        required: false
+        default: "true"
+  push:
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: "packages/sync-simulator/package-lock.json"
+
+      - name: Validate
+        shell: pwsh
+        run: npm run ci:validate
+
+  package_windows:
+    needs: validate
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Build windows package
+        shell: pwsh
+        run: |
+          dotnet publish apps/windows -c Release -o artifacts/windows
+
+      - name: Upload windows artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-package
+          path: artifacts/windows/**
+          if-no-files-found: error
+
+  package_android:
+    needs: validate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Build android release
+        shell: bash
+        run: |
+          cd apps/android
+          gradle assembleRelease
+
+      - name: Upload android artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-apk
+          path: apps/android/app/build/outputs/apk/release/**/*.apk
+          if-no-files-found: error
+
+  package_apple:
+    needs: validate
+    runs-on: macos-latest
+    env:
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      APPLE_SIGN_IDENTITY: ${{ secrets.APPLE_SIGN_IDENTITY }}
+      APPLE_PROFILE_NAME: ${{ secrets.APPLE_PROFILE_NAME }}
+      IOS_BUNDLE_ID: ${{ secrets.IOS_BUNDLE_ID }}
+      MACOS_BUNDLE_ID: ${{ secrets.MACOS_BUNDLE_ID }}
+      IOS_SCHEME: ClipboardSynciOS
+      MACOS_SCHEME: ClipboardSyncMac
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build apple packages
+        shell: bash
+        run: |
+          chmod +x scripts/release/apple-build.sh
+          scripts/release/apple-build.sh
+
+      - name: Upload apple artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: apple-packages
+          path: |
+            artifacts/ios/**/*.ipa
+            artifacts/macos/**/*.app
+            artifacts/macos/**/*.pkg
+            artifacts/macos/**/*.dmg
+          if-no-files-found: error
+
+  publish_release:
+    name: Create GitHub Release
+    needs: [package_windows, package_android, package_apple]
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download windows artifact (if exists)
+        uses: actions/download-artifact@v5
+        continue-on-error: true
+        with:
+          name: windows-package
+          path: release/windows
+
+      - name: Download android artifact (if exists)
+        uses: actions/download-artifact@v5
+        continue-on-error: true
+        with:
+          name: android-apk
+          path: release/android
+
+      - name: Download apple artifact (if exists)
+        uses: actions/download-artifact@v5
+        continue-on-error: true
+        with:
+          name: apple-packages
+          path: release/apple
+
+      - name: Check whether any package exists
+        id: files
+        shell: bash
+        run: |
+          shopt -s nullglob globstar
+          files=(release/**/*)
+          real_files=()
+          for f in "${files[@]}"; do
+            if [ -f "$f" ]; then
+              real_files+=("$f")
+            fi
+          done
+
+          echo "Found ${#real_files[@]} file(s)."
+          if [ "${#real_files[@]}" -gt 0 ]; then
+            echo "has_files=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_files=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create release tag variables
+        if: steps.files.outputs.has_files == 'true'
+        id: meta
+        shell: bash
+        run: |
+          SHORT_SHA="${GITHUB_SHA::7}"
+          TAG="build-${GITHUB_RUN_NUMBER}-${SHORT_SHA}"
+          TITLE="Build ${GITHUB_RUN_NUMBER} (${SHORT_SHA})"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "title=$TITLE" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Release
+        if: steps.files.outputs.has_files == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          gh release create "${{ steps.meta.outputs.tag }}" \
+            --target "${GITHUB_SHA}" \
+            --title "${{ steps.meta.outputs.title }}" \
+            --notes "Automated build release for commit ${GITHUB_SHA}" \
+            --prerelease
+
+      - name: Upload windows assets to release
+        if: steps.files.outputs.has_files == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          if find release/windows -type f | grep -q .; then
+            gh release upload "${{ steps.meta.outputs.tag }}" release/windows/**/* --clobber
+          fi
+
+      - name: Upload android assets to release
+        if: steps.files.outputs.has_files == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          if find release/android -type f | grep -q .; then
+            gh release upload "${{ steps.meta.outputs.tag }}" release/android/**/* --clobber
+          fi
+
+      - name: Upload apple assets to release
+        if: steps.files.outputs.has_files == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          if find release/apple -type f | grep -q .; then
+            gh release upload "${{ steps.meta.outputs.tag }}" release/apple/**/* --clobber
+          fi
+
+      - name: Fail if no package was produced
+        if: steps.files.outputs.has_files != 'true'
+        shell: bash
+        run: |
+          echo "No successful package artifacts were found. Release was not created."
+          exit 1
