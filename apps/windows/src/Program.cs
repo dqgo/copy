@@ -9,25 +9,33 @@ using System.Linq;
 using System.Text.Json;
 using Microsoft.Win32;
 
-internal sealed class MemoryClipboardReader : IClipboardReader
+internal sealed class SystemClipboardReader : IClipboardReader
 {
-    private readonly string? _value;
-
-    public MemoryClipboardReader(string? value)
+    public string? ReadText()
     {
-        _value = value;
+        try
+        {
+            return Clipboard.ContainsText() ? Clipboard.GetText() : null;
+        }
+        catch
+        {
+            return null;
+        }
     }
-
-    public string? ReadText() => _value;
 }
 
-internal sealed class MemoryClipboardWriter : IClipboardWriter
+internal sealed class SystemClipboardWriter : IClipboardWriter
 {
-    public string LastValue { get; private set; } = string.Empty;
-
     public void WriteText(string text)
     {
-        LastValue = text;
+        try
+        {
+            Clipboard.SetText(text);
+        }
+        catch
+        {
+            // Ignore clipboard busy errors in MVP runtime path.
+        }
     }
 }
 
@@ -192,8 +200,8 @@ internal static class Program
     {
         ApplicationConfiguration.Initialize();
 
-        var reader = new MemoryClipboardReader(null);
-        var writer = new MemoryClipboardWriter();
+        var reader = new SystemClipboardReader();
+        var writer = new SystemClipboardWriter();
         var store = new SecureStoreAdapter();
         var service = new SyncService(reader, writer, store);
         var workspaceKey = service.LoadWorkspaceKey();
@@ -235,6 +243,8 @@ internal static class Program
         pairingRequests.AddRange(LoadPairingRequests(store));
         status.TrustedDeviceCount = trustedDevices.Count;
         status.PendingPairingCount = pairingRequests.Count;
+
+        void PersistRuntimeSnapshots() => SaveRuntimeSnapshots(store, trustedDevices, pairingRequests, history);
 
         var locale = "zh-CN";
 
@@ -325,9 +335,11 @@ internal static class Program
         var sendHtml = new Button { Text = T(locale, "sendHtml"), Width = 120, Height = 32 };
         sendHtml.Click += (_, _) =>
         {
+            var text = service.CaptureClipboard() ?? "(empty)";
             status.SyncedOutCount += 1;
             sentValue.Text = status.SyncedOutCount.ToString();
-            history.Items.Insert(0, "[out] text/html · <b>Clipboard Sync</b>");
+            history.Items.Insert(0, $"[out] text/plain · {text}");
+            PersistRuntimeSnapshots();
         };
 
         var sendImageRef = new Button { Text = T(locale, "sendImage"), Width = 120, Height = 32 };
@@ -335,7 +347,15 @@ internal static class Program
         {
             status.SyncedOutCount += 1;
             sentValue.Text = status.SyncedOutCount.ToString();
-            history.Items.Insert(0, "[out] image/png · screenshot.png (ref)");
+            if (Clipboard.ContainsImage())
+            {
+                history.Items.Insert(0, "[out] image/png · clipboard-image");
+            }
+            else
+            {
+                history.Items.Insert(0, "[out] image/png · no-image-in-clipboard");
+            }
+            PersistRuntimeSnapshots();
         };
 
         var sendFileRef = new Button { Text = T(locale, "sendFile"), Width = 120, Height = 32 };
@@ -343,7 +363,21 @@ internal static class Program
         {
             status.SyncedOutCount += 1;
             sentValue.Text = status.SyncedOutCount.ToString();
-            history.Items.Insert(0, "[out] application/x-clipboard-file-ref · local-file-ref");
+            using var dialog = new OpenFileDialog
+            {
+                Title = "Select file to share reference",
+                CheckFileExists = true,
+                Multiselect = false
+            };
+            if (dialog.ShowDialog(form) == DialogResult.OK)
+            {
+                history.Items.Insert(0, $"[out] application/x-clipboard-file-ref · {dialog.FileName}");
+            }
+            else
+            {
+                history.Items.Insert(0, "[out] application/x-clipboard-file-ref · canceled");
+            }
+            PersistRuntimeSnapshots();
         };
 
         quickActions.Controls.Add(sendHtml);
@@ -373,6 +407,7 @@ internal static class Program
                 errValue.Text = status.LastErrorMessage;
                 history.Items.Insert(0, "[error] webdev · connection failed");
             }
+            PersistRuntimeSnapshots();
         };
         var manualSync = new Button { Text = T(locale, "manualSync"), Width = 180, Height = 34 };
         manualSync.Click += async (_, _) =>
@@ -387,6 +422,7 @@ internal static class Program
                     status.LastErrorMessage = "WebDev upload failed";
                     errValue.Text = status.LastErrorMessage;
                     history.Items.Insert(0, "[error] webdev · upload failed");
+                    PersistRuntimeSnapshots();
                     return;
                 }
 
@@ -408,6 +444,7 @@ internal static class Program
             sentValue.Text = status.SyncedOutCount.ToString();
             recvValue.Text = status.SyncedInCount.ToString();
             errValue.Text = "None";
+            PersistRuntimeSnapshots();
         };
         statusGrid.Controls.Add(quickActions, 0, 5);
         statusGrid.Controls.Add(quickActions, 0, 7);
@@ -470,6 +507,7 @@ internal static class Program
                     status.LastErrorMessage = $"Revoked device: {selected.DeviceId}";
                     errValue.Text = status.LastErrorMessage;
                     history.Items.Insert(0, $"[event] revoke · {selected.DeviceId}");
+                    PersistRuntimeSnapshots();
                 }
             }
         };
@@ -528,6 +566,7 @@ internal static class Program
                 pendingValue.Text = status.PendingPairingCount.ToString();
                 trustedValue.Text = status.TrustedDeviceCount.ToString();
                 history.Items.Insert(0, $"[event] pairing · approved {selected.DeviceName}");
+                PersistRuntimeSnapshots();
             }
         };
 
@@ -550,6 +589,7 @@ internal static class Program
                     status.PendingPairingCount = Math.Max(0, status.PendingPairingCount - 1);
                     pendingValue.Text = status.PendingPairingCount.ToString();
                     history.Items.Insert(0, $"[event] pairing · rejected {selected.DeviceName}");
+                    PersistRuntimeSnapshots();
                 }
             }
         };
