@@ -1,5 +1,10 @@
 import SwiftUI
 import AppKit
+import Combine
+
+private extension Notification.Name {
+    static let macRuntimeDataChanged = Notification.Name("mac.runtime.data.changed")
+}
 
 struct MacL10n {
     static let translations: [String: [String: String]] = [
@@ -177,8 +182,10 @@ struct MacStatusMenuView: View {
             settings.webDevUsername = store.get("webdav_username") ?? ""
             settings.webDevPassword = store.get("webdav_password") ?? ""
             settings.localServerEnabled = store.get("local_server_enabled") == "1"
-            status.trustedDeviceCount = decodeList(store.get("trusted_devices_json"), as: [MacTrustedDevice].self).count
-            status.pendingPairingCount = decodeList(store.get("pairing_requests_json"), as: [PairingRequestItem].self).count
+            refreshRuntimeCounts(store: store)
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .macRuntimeDataChanged)) { _ in
+            refreshRuntimeCounts(store: SecureStoreAdapter())
         }
         .onChange(of: settings.webDevEnabled) { _, newValue in
             let store = SecureStoreAdapter()
@@ -336,6 +343,16 @@ struct MacStatusMenuView: View {
         guard !settings.webDevUsername.isEmpty else { return }
         let raw = Data("\(settings.webDevUsername):\(settings.webDevPassword)".utf8).base64EncodedString()
         request.setValue("Basic \(raw)", forHTTPHeaderField: "Authorization")
+    }
+
+    private func refreshRuntimeCounts(store: SecureStoreAdapter) {
+        let devices = decodeList(store.get("trusted_devices_json"), as: [MacTrustedDevice].self)
+        let requests = decodeList(store.get("pairing_requests_json"), as: [PairingRequestItem].self)
+        let history = decodeList(store.get("history_items_json"), as: [SyncHistoryItem].self)
+        status.trustedDeviceCount = devices.count
+        status.pendingPairingCount = requests.count
+        status.syncedOutCount = history.filter { $0.direction == "out" }.count
+        status.syncedInCount = history.filter { $0.direction == "in" }.count
     }
 }
 
@@ -516,6 +533,7 @@ private func persistList<T: Codable>(_ key: String, value: T) {
     let store = SecureStoreAdapter()
     guard let data = try? JSONEncoder().encode(value), let json = String(data: data, encoding: .utf8) else { return }
     store.set(key, value: json)
+    NotificationCenter.default.post(name: .macRuntimeDataChanged, object: nil)
 }
 
 private func decodeList<T: Codable>(_ raw: String?, as type: T.Type) -> T {

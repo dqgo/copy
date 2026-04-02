@@ -1,27 +1,24 @@
-# Windows App Skeleton
+# Windows 使用指南（用户版）
 
-Planned stack: WinUI 3 + background tray process.
+## 适用人群
 
-## Current MVP UI (implemented)
+希望在 Windows 设备上使用 Clipboard Sync 的普通用户。
 
-- status tab with connection and sync counters
-- trusted devices tab with revoke action
-- pairing requests tab with approve/reject actions
-- manual sync button for foreground trigger
-- visible desktop window to confirm app is running
-- tray resident mode with quick actions (show/manual sync/exit)
-- content quick send actions: text/html, image ref, file ref
-- status panel now includes trusted-device and pending-pairing counters
+## 安装
 
-## MVP integration points
+1. 从 GitHub Releases 下载 Windows 安装包（.exe）
+2. 双击安装并启动应用
 
-- implement ClipboardReader/Writer
-- SecureStore via DPAPI (implemented, persisted under LocalApplicationData/ClipboardSync)
-- connect SyncTransport (MQTT over WSS)
-- expose trusted device list and revocation UI
+## 首次使用
 
-## Local run
+1. 打开设置页面
+2. 选择默认公共服务或填写私有 WebDAV
+3. 执行连接测试
+4. 与另一台设备完成配对
+5. 在状态页点击手动同步
 
-```bash
-dotnet run --project apps/windows/ClipboardSync.Windows.csproj
-```
+## 常见问题
+
+- 连接失败：检查网络与服务地址
+- 配对后无同步：确认双方都在线，再手动同步一次
+- 历史为空：先执行一次成功同步

@@ -1,24 +1,23 @@
-# macOS App Skeleton
+# macOS 使用指南（用户版）
 
-Planned stack: Swift + AppKit/SwiftUI hybrid menu bar app.
+## 当前状态
 
-## Current MVP UI (implemented as SwiftUI skeleton)
+macOS 端主要功能已进入可用准备阶段，正式安装包即将提供。
 
-- menu bar status panel (MenuBarExtra)
-- trusted devices window with revoke-ready list structure
-- pairing requests window with approve/reject actions
-- sync history window
-- manual sync action from menu panel
-- status panel includes trusted-device and pending-pairing counters
-- visual polish: gradient status panel and richer metadata labels
+## 你可以期待
 
-## MVP integration points
+- 菜单栏入口
+- 状态、设备、配对、历史窗口
+- 手动同步与连接测试
 
-- implement clipboard listener + menu bar status
-- implement SecureStore via Keychain
-- connect SyncTransport (MQTT over WSS)
-- trusted devices and history window
+## 上线后的使用步骤
 
-## Build note
+1. 安装并启动 macOS 版本
+2. 在设置中完成服务配置
+3. 执行连接测试
+4. 与其他设备完成配对
+5. 通过菜单栏或窗口执行手动同步
 
-- runtime build/package requires macOS + Xcode.
+## 说明
+
+如果你在后台看到状态提醒但未同步完成，请打开主窗口执行一次完整同步。

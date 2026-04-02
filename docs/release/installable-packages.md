@@ -1,31 +1,36 @@
-# Installable Package Output Guide
+# 安装包下载与安装指南（用户版）
 
-## Current status in this workspace
+## 获取安装包
 
-- Windows: project skeleton created (apps/windows/ClipboardSync.Windows.csproj)
-- Android: Gradle Android application skeleton created (apps/android)
-- iOS: service code skeleton created, no xcodeproj yet
-- macOS: service code skeleton created, no xcodeproj yet
+请在 GitHub Releases 页面下载对应平台安装包。
 
-## What can be packaged now
+## 平台支持状态
 
-1. Windows (requires .NET SDK on build machine)
-- Output target: artifacts/windows/*.exe
-- Command: dotnet publish apps/windows -c Release -o artifacts/windows
+| 平台 | 安装包状态 | 说明 |
+|------|------------|------|
+| Windows | 已提供 | 可直接安装使用 |
+| Android | 已提供 | 可直接安装使用 |
+| iOS | 准备中 | 即将上线 |
+| macOS | 准备中 | 即将上线 |
 
-2. Android (requires Gradle + Android SDK)
-- Output target: apps/android/app/build/outputs/apk/release/*.apk
-- Command: gradle assembleRelease (in apps/android)
+## 安装步骤（通用）
 
-## Apple platform requirement
+1. 下载与你系统匹配的安装包
+2. 运行安装或直接安装 APK
+3. 首次启动进入设置页面
+4. 选择默认服务或填写私有 WebDAV
+5. 执行连接测试
+6. 与另一台设备完成配对后开始同步
 
-- iOS/macOS installable package generation requires macOS + Xcode project + signing assets.
-- Suggested outputs:
-  - iOS: .ipa
-  - macOS: .app / .pkg / .dmg
+## 首次同步检查清单
 
-## One-command helper
+- 两台设备都在线
+- 服务地址可访问
+- 账号密码正确
+- 配对已审批通过
 
-- Script: scripts/release/build-all.ps1
-- Root command: npm run release:all
-- The script is strict for full release: missing macOS/Xcode/xcodeproj now fails the run instead of skipping Apple packaging.
+## 常见问题
+
+- 无法连接：先检查网络与 WebDAV 地址
+- 配对后不同步：先尝试手动同步一次
+- 重启后配置丢失：请确认应用未被系统清理数据

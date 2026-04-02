@@ -1,51 +1,21 @@
-# Milestones and Acceptance
+# 版本里程碑（用户版）
 
-## Milestone 0: Protocol and Security Baseline
+## Milestone 1：基础同步能力
 
-Deliverables:
-- protocol envelope and validation
-- crypto primitives and signing
-- replay guard model
+已完成：
+- 配对、手动同步、历史记录、基础设置
+- 安全存储与错误提示
 
-Acceptance:
-- protocol validation passes
-- simulator encrypt/decrypt flow passes
+## Milestone 2：跨平台体验完善
 
-## Milestone 1: MVP Core Engine
+进行中：
+- 四端首启体验统一
+- 状态与错误文案统一
+- iOS/macOS 安装包交付
 
-Deliverables:
-- sync engine with retry/dedup/replay checks
-- pairing manager with approval/revocation
-- sensitive content policy
+## Milestone 3：稳定性与易用性提升
 
-Acceptance:
-- simulator demo passes
-- simulator tests pass
-- revocation event increments key version
-
-## Milestone 2: Platform Integrations
-
-Deliverables:
-- Windows/Android/iOS/macOS service adapters (skeleton completed)
-- secure storage adapters (contract completed, platform binding pending)
-- status and trusted-device views (app-core status model completed, native UI binding pending)
-
-Acceptance:
-- cross-device sync succeeds on at least 3 real platforms (pending physical device run)
-- iOS fallback path works in foreground mode (pending iOS app runtime integration)
-
-## Milestone 3: Stability and Extensions
-
-Deliverables:
-- mqtt real broker adapter (implemented in sync-simulator)
-- weak network recovery scenarios (implemented in simulator network tests)
-- richer content types after policy review (pending)
-
-Acceptance:
-- reconnect and idempotency test matrix passes (simulator + app-core test set)
-- no plaintext payload in logs (logger redaction tests)
-
-## Completion note
-
-All plan items that are implementable in this repository and environment are now completed.
-Remaining items require real platform runtime projects, signing, and device execution outside the current headless TypeScript workspace.
+计划中：
+- 弱网恢复能力提升
+- 更完善的验收流程
+- 更多同步能力按稳定性逐步开放

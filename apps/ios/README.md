@@ -1,24 +1,22 @@
-# iOS App Skeleton
+# iOS 使用指南（用户版）
 
-Planned stack: Swift + SwiftUI + native navigation.
+## 当前状态
 
-## Current MVP UI (implemented as SwiftUI skeleton)
+iOS 端主要功能已进入可用准备阶段，正式安装包即将提供。
 
-- app entry: ClipboardSyncIOSApp
-- dashboard with Status/Devices/Pairing/History/Settings tabs
-- status card includes trusted-device and pending-pairing counters
-- foreground manual sync action
-- device revoke flow via list delete
-- pairing request approve/reject flow in dedicated tab
-- visual polish: gradient backdrop and material cards
+## 你可以提前了解
 
-## MVP integration points
+- 功能包含：状态、设备、配对、历史、设置
+- 同步方式：以前台触发为主
+- 支持连接测试与错误提示
 
-- implement foreground clipboard capture flow
-- implement SecureStore via Keychain
-- connect SyncTransport (MQTT over WSS)
-- pairing + trusted devices + manual sync UI
+## 上线后的使用步骤
 
-## Build note
+1. 安装 iOS 版本
+2. 完成服务配置与连接测试
+3. 与其他设备完成配对审批
+4. 执行手动同步并确认历史记录
 
-- runtime build/package requires macOS + Xcode.
+## 说明
+
+受 iOS 系统策略影响，后台持续剪贴板同步能力有限，前台触发更稳定。

@@ -1,63 +1,27 @@
-# MVP Service Contracts
+# 核心功能说明（用户版）
 
-This document defines the minimal platform-side service contracts required to integrate with the sync core.
+这份文档说明 Clipboard Sync 的基础能力边界，帮助你理解“能做什么、不能做什么”。
 
-## Core contracts
+## 当前基础能力
 
-- ClipboardReader
-- ClipboardWriter
-- SecureStore
-- SyncTransport
-- DeviceRegistry
+- 读取本地剪贴板文本
+- 将文本同步到已配对设备
+- 将远端文本写回本地剪贴板
+- 保存必要配置与信任设备
 
-## ClipboardReader
+## 同步方式
 
-Input: none
-Output:
-- text: string
-- sourceAppId?: string
-- capturedAt: ISO8601
+- 手动触发同步（当前主路径）
+- 部分平台支持前台快捷触发
 
-## ClipboardWriter
+## 设备管理
 
-Input:
-- text: string
-- reason: remote_sync | manual_paste
-Output:
-- success: boolean
+- 支持配对审批
+- 支持拒绝配对
+- 支持撤销已信任设备
 
-## SecureStore
+## 平台差异说明
 
-Keys:
-- workspace_key
-- device_private_key
-- device_public_key
-- key_version
-
-Operations:
-- get(key)
-- set(key, value)
-- delete(key)
-
-## SyncTransport
-
-Protocol: MQTT over TLS/WSS
-
-Operations:
-- connect()
-- disconnect()
-- subscribe(topic)
-- publish(topic, envelope)
-
-## DeviceRegistry
-
-Operations:
-- listTrusted()
-- approvePairing(request)
-- revoke(deviceId)
-
-## Platform-specific notes
-
-- iOS: no continuous background clipboard listening; use foreground-triggered sync.
-- Android: support foreground service + fallback periodic sync.
-- Windows/macOS: allow background listener with user-visible status.
+- iOS：受系统限制，后台持续监听能力有限
+- Android：支持通知快捷动作与前台服务场景
+- Windows/macOS：更接近桌面工作流交互

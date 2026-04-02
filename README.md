@@ -1,117 +1,54 @@
-# Clipboard Sync Monorepo (MVP Bootstrap)
+# Clipboard Sync
 
-This repository now includes the first executable implementation slice:
+Clipboard Sync 是一款跨平台剪贴板同步工具，帮助你在多台设备之间更快地传递文本内容。
 
-- protocol specification package
-- crypto primitives package
-- sync simulator package
-- pairing state manager
-- replay guard + sensitive content policy
-- MQTT adapter abstraction with in-memory broker
+## 当前发布状态
 
-And now includes second-slice implementation artifacts:
+| 平台 | 当前状态 | 安装形式 |
+|------|----------|----------|
+| Windows | 可使用 | 安装包（.exe） |
+| Android | 可使用 | 安装包（.apk） |
+| iOS | 准备中 | 即将提供 |
+| macOS | 准备中 | 即将提供 |
 
-- pairing manager with approval and revocation events
-- replay guard integrated in sync receive path
-- simulator test script for regression checks
-- platform app skeleton folders and MVP contracts docs
+说明：iOS 与 macOS 安装包正在整理中，当前仓库已包含对应功能说明与使用文档。
 
-## Quick start
+## 主要功能
 
-1. Bootstrap dependencies
+- 设备配对与信任管理
+- 手动同步文本剪贴板
+- WebDAV 服务配置与连接测试
+- 同步历史记录查看
+- 多语言界面（中文/英文）
+- 深色与浅色主题
 
-```bash
-npm run bootstrap
-```
+## 快速开始（普通用户）
 
-2. Build everything
+1. 打开 GitHub Releases，下载与你系统对应的安装包。
+2. 安装并启动应用。
+3. 在“设置”中选择服务模式：
+   - 默认公共服务（开箱即用）
+   - 私有 WebDAV（适合自托管）
+4. 在两台设备上完成配对审批。
+5. 点击“手动同步”验证收发是否成功。
 
-```bash
-npm run build
-```
+## 隐私与安全
 
-3. Validate protocol envelope sample
+- 敏感配置使用系统安全存储（Keystore / Keychain / DPAPI）。
+- 你可以随时撤销已信任设备并停止该设备同步。
+- 提交问题时请不要公开你的账号密码和敏感剪贴板内容。
 
-```bash
-npm run validate:protocol
-```
+## 文档导航
 
-4. Run simulator demo
+- 用户路线图：plan.md
+- 功能进度：实现进度.md
+- 安装指南：docs/release/installable-packages.md
+- 安全说明：docs/security/threat-model.md
+- 状态说明：docs/architecture/ui-status-schema.md
 
-```bash
-npm run sim:demo
-```
+## 反馈
 
-5. Run simulator tests
-
-```bash
-npm run sim:test
-npm run sim:test:network
-```
-
-6. Run app-core demo and tests
-
-```bash
-npm run app:demo
-npm run app:test
-```
-
-7. Start built-in custom sync server (optional)
-
-```bash
-npm run server:start
-```
-
-The simulator demonstrates:
-
-- message envelope creation
-- encrypt + sign + verify + decrypt
-- dedup handling
-- retry publishing
-- replay rejection (nonce + timestamp + sequence)
-- policy-based sensitive content blocking
-- weak-network retry and recovery verification
-
-App-core demonstrates:
-
-- reusable app orchestration layer
-- transport-agnostic sync coordination
-- trusted-device public-key verification
-- invite-based pairing workflow with manual approval and auto-approve policy
-- device revoke/remove and current space reset lifecycle operations
-- log redaction to avoid plaintext leakage
-
-Real broker support:
-
-- MQTT real adapter: packages/sync-simulator/src/mqttReal.ts
-
-WebDev + custom server:
-
-- WebDev runtime options are available in app-core options and env template
-- Custom sync server requires `/start-service` endpoint and health check support
-
-Release and packaging:
-
-- one-click release helper: `npm run release:all`
-- local + cloud helper: `npm run release:all:cloud`
-- packaging for iOS/macOS requires macOS + Xcode projects
-- packaging status and outputs: docs/release/installable-packages.md
-- cloud packaging workflow: docs/release/cloud-packaging.md
-
-Asset drawing tools:
-
-- free options list: docs/design/free-drawing-tools.md
-
-## Docs
-
-- architecture contracts: docs/architecture/mvp-contracts.md
-- security baseline: docs/security/threat-model.md
-- milestones: docs/architecture/milestones.md
-- cross-platform UI status schema: docs/architecture/ui-status-schema.md
-
-## Config and CI
-
-- env template: config/env.example
-- CI validation script: scripts/ci/validate.ps1
-- GitHub Actions workflow: .github/workflows/ci.yml
-- one-shot CI command: npm run ci:validate
+如果你在使用中遇到问题，请在 GitHub Issues 提交：
+- 使用平台与系统版本
+- 操作步骤
+- 错误提示截图（如有）

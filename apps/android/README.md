@@ -1,32 +1,24 @@
-# Android App Skeleton
+# Android 使用指南（用户版）
 
-Planned stack: Kotlin + Jetpack Compose + Material 3.
+## 安装
 
-## Current MVP UI (implemented)
+1. 从 GitHub Releases 下载 Android 安装包（.apk）
+2. 在手机上完成安装并打开应用
 
-- compose material 3 dashboard with Status/Devices/Pairing/History/Settings tabs
-- status metrics: connected/sent/received/rejected/trusted/pending-pairing/last error
-- manual sync button for foreground-triggered path
-- trusted device revoke action in list
-- pairing request approve/reject actions in dedicated tab
-- foreground notification quick actions: Manual Sync / Pause
-- content quick send actions: text/html, image ref, file ref
-- visual polish: gradient background, card hierarchy, trust chip badges
+## 首次使用
 
-## MVP integration points
+1. 进入设置并配置服务
+2. 执行连接测试
+3. 在配对页面完成审批
+4. 回到状态页面手动同步
 
-- implement ClipboardReader/Writer with version-aware restrictions
-- implement SecureStore via Android Keystore
-- connect SyncTransport (MQTT over WSS)
-- foreground service mode and periodic fallback mode
+## Android 提示
 
-## Local run
+- 首次使用请允许必要通知权限（用于快捷操作提醒）
+- 如果系统省电策略过严，可能影响后台提示及时性
 
-```bash
-cd apps/android
-gradle :app:assembleDebug
-```
+## 排查建议
 
-Note:
-
-- build output directory is relocated to `C:/temp/ClipboardSyncAndroidBuild` to reduce OneDrive file lock issues on Windows.
+- 同步失败优先检查网络
+- WebDAV 场景下检查地址、账号、密码
+- 暂停状态下不会执行手动同步，请先恢复

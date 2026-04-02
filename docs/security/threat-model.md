@@ -1,32 +1,28 @@
-# Threat Model (MVP)
+# 安全与隐私说明（用户版）
 
-## Assets
+## 我们保护什么
 
-- Clipboard plaintext
-- Workspace key
-- Device private keys
-- Device trust list
+- 你的剪贴板同步内容
+- 设备配对信任关系
+- 服务连接配置中的敏感信息
 
-## Threats
+## 我们做了哪些保护
 
-- Unauthorized device joins
-- Replay attack
-- Topic guessing/enumeration
-- Broker-side traffic observation
-- Sensitive data accidental sync
-- Lost device still trusted
+- 使用签名与加密机制保护同步数据
+- 防重放机制防止旧消息重复注入
+- 可撤销已信任设备，降低丢失设备风险
+- 敏感配置使用系统安全存储：
+  - Android：Keystore
+  - iOS/macOS：Keychain
+  - Windows：DPAPI
 
-## Controls
+## 你的安全建议
 
-- Pairing request signatures
-- Envelope signatures and AEAD encryption
-- Replay guard: timestamp window + nonce cache + sequence monotonic check
-- Workspace-scoped topic with salt
-- Sensitive-content blocking policy (OTP/card/ID/password hints)
-- Device revocation + key version bump
+- 定期检查并清理信任设备列表
+- WebDAV 账号使用独立密码
+- 发现异常同步时立即撤销可疑设备并修改凭据
 
-## Logging
+## 隐私承诺
 
-- Never log plaintext clipboard
-- Never log workspace key or private key material
-- Keep only envelope metadata and result codes
+- 文档与日志不会要求你上传明文剪贴板内容。
+- 提交问题时，请尽量打码敏感信息。

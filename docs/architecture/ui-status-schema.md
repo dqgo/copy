@@ -1,57 +1,24 @@
-# Cross-Platform UI Status Schema
+# 状态页字段说明（用户版）
 
-This file defines the normalized status fields now used by Windows, Android, iOS, and macOS UI layers.
+本页用于解释应用状态页中常见字段，方便你快速判断同步是否正常。
 
-## Connection state enum
+## 连接状态
 
-Allowed values:
+- CONNECTED：连接正常，可同步
+- DEGRADED：连接不稳定，可能出现延迟
+- DISCONNECTED：当前未连接，无法同步
 
-- `CONNECTED`
-- `DEGRADED`
-- `DISCONNECTED`
+## 统计字段
 
-## Status fields
+- 已发送：本设备发出的同步次数
+- 已接收：本设备收到的同步次数
+- 已拒绝：被拒绝或拦截的事件数量
+- 已信任设备：当前可同步的设备数量
+- 待处理配对：等待你审批的配对请求数量
+- 最近错误：最近一次失败原因摘要
 
-- `connectionState`: enum above
-- `syncedOutCount`: total outgoing sync events
-- `syncedInCount`: total incoming sync events
-- `rejectedEventCount`: rejected/replayed/revoked-related events shown to user
-- `trustedDeviceCount`: current trusted device total
-- `pendingPairingCount`: number of invite-based pairing requests waiting for approval
-- `lastErrorMessage`: last visible error summary, nullable
+## 快速判断建议
 
-## Platform mappings
-
-- Windows: `apps/windows/src/StatusViewModel.cs`
-- Android: `apps/android/src/main/java/com/clipboardsync/StatusViewModel.kt`
-- iOS: `apps/ios/Sources/StatusViewModel.swift`
-- macOS: `apps/macos/Sources/StatusViewModel.swift`
-
-## UI behavior baseline
-
-- Manual sync increments `syncedOutCount` and `syncedInCount` in MVP simulation flow.
-- Device revoke increments `rejectedEventCount` and writes `lastErrorMessage`.
-- Status pages display enum value directly in current MVP UI skeleton.
-
-## Settings-driven behavior (implemented in app-core)
-
-- When `autoSyncEnabled=false`, non-manual send requests are rejected with `manual-mode-required`.
-- Blacklisted app IDs are blocked by `sendTextFromApp(sourceAppId, text)` and recorded as history failures.
-- `syncMode`, `themeMode`, `language`, and `webDevSyncEnabled` update runtime status snapshot.
-- `pairingPolicy` supports two values:
-	- `manual-approve`: invite join requests enter pending queue and require explicit approval.
-	- `auto-approve-invite`: valid one-time invite requests are auto-approved and directly added to trusted devices.
-
-## Pairing workflow status notes
-
-- `requestPairingByInvite` creates a pending request in manual mode and increments `pendingPairingCount`.
-- `approvePairingRequest` decrements `pendingPairingCount` and increments `trustedDeviceCount`.
-- `rejectPairingRequest` decrements `pendingPairingCount` without changing `trustedDeviceCount`.
-
-## Content support (current protocol + app-core)
-
-- `text/plain`
-- `text/html`
-- `image/png`
-- `application/octet-stream`
-- `application/x-clipboard-file-ref`
+1. 先看连接状态是否为 CONNECTED
+2. 再看待处理配对是否为 0
+3. 最后通过已发送/已接收确认同步是否发生

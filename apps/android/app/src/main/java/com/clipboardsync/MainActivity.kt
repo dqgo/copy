@@ -365,6 +365,13 @@ private fun ClipboardSyncAndroidApp() {
                                 status = state.status,
                                 language = state.settings.language,
                                 onManualSync = {
+                                    if (prefs.getBoolean("sync_paused", false)) {
+                                        state = state.copy(
+                                            status = state.status.copy(lastErrorMessage = "sync paused"),
+                                            errorMessage = "Sync is paused. Resume from quick action first."
+                                        )
+                                        return@StatusTab
+                                    }
                                     val webdev = state.settings.webDevEnabled && state.settings.webDevBaseUrl.isNotBlank()
                                     if (webdev) {
                                         val cfg = WebDavConfig(
