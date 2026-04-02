@@ -46,6 +46,7 @@ data class SyncNowResult(
 object SyncCoordinator {
     private const val RELAY_LAST_APPLIED_KEY = "relay_last_applied_by_sender_json"
     private const val RELAY_LAST_UPLOADED_KEY = "relay_last_uploaded_by_target_json"
+    private val deviceIdRegex = Regex("^[A-Za-z0-9][A-Za-z0-9._-]{4,62}[A-Za-z0-9]$")
 
     fun ensureIdentity(secureStore: AndroidKeystoreStore): Pair<String, String> {
         var workspaceKey = secureStore.get("workspace_key")
@@ -71,6 +72,18 @@ object SyncCoordinator {
             .put("Platform", platform)
         val raw = payload.toString().toByteArray(StandardCharsets.UTF_8)
         return Base64.encodeToString(raw, Base64.NO_WRAP or Base64.URL_SAFE).trimEnd('=')
+    }
+
+    fun isValidDeviceId(deviceId: String): Boolean {
+        val normalized = deviceId.trim()
+        if (normalized.length < 6 || normalized.length > 64) {
+            return false
+        }
+        val dashIndex = normalized.indexOf('-')
+        if (dashIndex <= 0 || dashIndex >= normalized.length - 1) {
+            return false
+        }
+        return deviceIdRegex.matches(normalized)
     }
 
     fun tryParseInviteCode(inviteCode: String): InvitePayload? {

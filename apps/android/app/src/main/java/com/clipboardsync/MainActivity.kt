@@ -597,6 +597,14 @@ private fun ClipboardSyncAndroidApp() {
                                         return@PairingTab
                                     }
 
+                                    if (!SyncCoordinator.isValidDeviceId(payload.deviceId)) {
+                                        state = state.copy(
+                                            status = state.status.copy(lastErrorMessage = "Invalid invite device ID"),
+                                            errorMessage = "Invalid invite device ID"
+                                        )
+                                        return@PairingTab
+                                    }
+
                                     if (payload.deviceId.equals(state.deviceId, ignoreCase = true)) {
                                         state = state.copy(
                                             status = state.status.copy(lastErrorMessage = "Cannot pair with current device"),
@@ -640,8 +648,7 @@ private fun ClipboardSyncAndroidApp() {
                                         )
                                     } else {
                                         if (next.pairingRequests.any {
-                                                it.displayName.equals(payload.deviceName, ignoreCase = true)
-                                                    && it.platform.equals(payload.platform, ignoreCase = true)
+                                                it.deviceId.equals(payload.deviceId, ignoreCase = true)
                                             }) {
                                             state = state.copy(
                                                 status = state.status.copy(lastErrorMessage = "Pairing request already exists"),
@@ -676,6 +683,13 @@ private fun ClipboardSyncAndroidApp() {
                                         state = state.copy(
                                             status = state.status.copy(lastErrorMessage = "Remote device ID is empty"),
                                             errorMessage = "Remote device ID is empty"
+                                        )
+                                        return@PairingTab
+                                    }
+                                    if (!SyncCoordinator.isValidDeviceId(safeRemoteId)) {
+                                        state = state.copy(
+                                            status = state.status.copy(lastErrorMessage = "Invalid remote device ID format"),
+                                            errorMessage = "Invalid remote device ID format"
                                         )
                                         return@PairingTab
                                     }

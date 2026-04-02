@@ -95,18 +95,19 @@ public sealed class SyncService
     public void SavePublicRelaySettings(string baseUrl, string bucket, bool enabled)
     {
         _store.Set("public_relay_enabled", enabled ? "1" : "0");
-        _store.Set("public_relay_base_url", string.IsNullOrWhiteSpace(baseUrl) ? DefaultPublicRelayBaseUrl : baseUrl.Trim());
-        _store.Set("public_relay_bucket", bucket.Trim());
+        _store.Set("public_relay_base_url", NormalizePublicRelayBaseUrl(baseUrl));
+        _store.Set("public_relay_bucket", NormalizePublicRelayBucket(bucket));
     }
 
     public (bool Enabled, string BaseUrl, string Bucket) LoadPublicRelaySettings()
     {
         var enabled = _store.Get("public_relay_enabled") == "1";
         var baseUrl = _store.Get("public_relay_base_url");
+        var bucket = _store.Get("public_relay_bucket");
         return (
             enabled,
-            string.IsNullOrWhiteSpace(baseUrl) ? DefaultPublicRelayBaseUrl : baseUrl,
-            _store.Get("public_relay_bucket") ?? string.Empty
+            NormalizePublicRelayBaseUrl(baseUrl),
+            NormalizePublicRelayBucket(bucket)
         );
     }
 
@@ -334,7 +335,7 @@ public sealed class SyncService
 
     private static HttpClient BuildPublicRelayClient(string baseUrl)
     {
-        var normalizedBaseUrl = string.IsNullOrWhiteSpace(baseUrl) ? DefaultPublicRelayBaseUrl : baseUrl.Trim();
+        var normalizedBaseUrl = NormalizePublicRelayBaseUrl(baseUrl);
         if (!normalizedBaseUrl.EndsWith('/'))
         {
             normalizedBaseUrl += "/";
@@ -358,5 +359,35 @@ public sealed class SyncService
             + toDeviceId.Trim().ToLowerInvariant()
             + "-"
             + fromDeviceId.Trim().ToLowerInvariant();
+    }
+
+    private static string NormalizePublicRelayBaseUrl(string? input)
+    {
+        var raw = string.IsNullOrWhiteSpace(input) ? DefaultPublicRelayBaseUrl : input.Trim();
+        if (!Uri.TryCreate(raw, UriKind.Absolute, out var uri))
+        {
+            return DefaultPublicRelayBaseUrl;
+        }
+
+        return uri.GetLeftPart(UriPartial.Authority);
+    }
+
+    private static string NormalizePublicRelayBucket(string? input)
+    {
+        if (string.IsNullOrWhiteSpace(input))
+        {
+            return string.Empty;
+        }
+
+        var raw = input.Trim();
+        if (Uri.TryCreate(raw, UriKind.Absolute, out var absoluteUri))
+        {
+            var segments = absoluteUri.AbsolutePath
+                .Split('/', StringSplitOptions.RemoveEmptyEntries);
+            return segments.Length > 0 ? segments[0].Trim() : string.Empty;
+        }
+
+        var relativeSegments = raw.Split('/', StringSplitOptions.RemoveEmptyEntries);
+        return relativeSegments.Length > 0 ? relativeSegments[0].Trim() : string.Empty;
     }
 }

@@ -601,13 +601,22 @@ internal static class Program
         var lastUploadedTextByTarget = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         var lastAppliedRemoteText = string.Empty;
 
+        List<DeviceItem> BuildValidTrustedPeers()
+        {
+            var selfId = deviceId ?? string.Empty;
+            return trustedDevices
+                .Where(x => !string.Equals(x.DeviceId, selfId, StringComparison.OrdinalIgnoreCase))
+                .Where(x => IsValidDeviceId(x.DeviceId))
+                .GroupBy(x => x.DeviceId, StringComparer.OrdinalIgnoreCase)
+                .Select(g => g.First())
+                .ToList();
+        }
+
         async Task<bool> UploadClipboardToPublicRelayByTargetsAsync(string text)
         {
             service.SavePublicRelaySettings(publicRelayUrlText.Text, publicRelayBucketText.Text, true);
             var selfId = deviceId ?? string.Empty;
-            var peers = trustedDevices
-                .Where(x => !string.Equals(x.DeviceId, selfId, StringComparison.OrdinalIgnoreCase))
-                .ToList();
+            var peers = BuildValidTrustedPeers();
 
             if (peers.Count == 0)
             {
@@ -659,6 +668,21 @@ internal static class Program
                 history.Items.Insert(0, "[out] public · to " + peer.DeviceId + " · " + text);
             }
 
+            if (!string.Equals(lastUploadedText, text, StringComparison.Ordinal))
+            {
+                var compatUploaded = await service.UploadClipboardToPublicRelayAsync(text);
+                if (compatUploaded)
+                {
+                    lastUploadedText = text;
+                    history.Items.Insert(0, "[out] public · legacy-compat · " + text);
+                }
+                else
+                {
+                    allUploaded = false;
+                    history.Items.Insert(0, "[warn] public · legacy-compat upload failed");
+                }
+            }
+
             return allUploaded;
         }
 
@@ -666,9 +690,7 @@ internal static class Program
         {
             service.SavePublicRelaySettings(publicRelayUrlText.Text, publicRelayBucketText.Text, true);
             var selfId = deviceId ?? string.Empty;
-            var peers = trustedDevices
-                .Where(x => !string.Equals(x.DeviceId, selfId, StringComparison.OrdinalIgnoreCase))
-                .ToList();
+            var peers = BuildValidTrustedPeers();
 
             foreach (var peer in peers)
             {
@@ -1005,6 +1027,13 @@ internal static class Program
                 return;
             }
 
+            if (!IsValidDeviceId(remoteDeviceId))
+            {
+                status.LastErrorMessage = "Invalid remote device ID format";
+                errValue.Text = status.LastErrorMessage;
+                return;
+            }
+
             if (string.Equals(remoteDeviceId, deviceId, StringComparison.OrdinalIgnoreCase))
             {
                 status.LastErrorMessage = "Cannot pair with current device";
@@ -1068,6 +1097,13 @@ internal static class Program
                 status.LastErrorMessage = parseError;
                 errValue.Text = status.LastErrorMessage;
                 history.Items.Insert(0, "[error] invite parse failed");
+                return;
+            }
+
+            if (!IsValidDeviceId(invitePayload.DeviceId))
+            {
+                status.LastErrorMessage = "Invalid invite device ID";
+                errValue.Text = status.LastErrorMessage;
                 return;
             }
 
@@ -1574,6 +1610,36 @@ internal static class Program
     private static string GenerateDeviceId()
     {
         return "win-" + Guid.NewGuid().ToString("N").Substring(0, 12);
+    }
+
+    private static bool IsValidDeviceId(string deviceId)
+    {
+        if (string.IsNullOrWhiteSpace(deviceId))
+        {
+            return false;
+        }
+
+        var normalized = deviceId.Trim();
+        if (normalized.Length < 6 || normalized.Length > 64)
+        {
+            return false;
+        }
+
+        var dashIndex = normalized.IndexOf('-');
+        if (dashIndex <= 0 || dashIndex >= normalized.Length - 1)
+        {
+            return false;
+        }
+
+        foreach (var ch in normalized)
+        {
+            if (!(char.IsLetterOrDigit(ch) || ch == '-' || ch == '_' || ch == '.'))
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private static string CreateInviteCode(string workspaceKey, string deviceId, string deviceName, string platform)
