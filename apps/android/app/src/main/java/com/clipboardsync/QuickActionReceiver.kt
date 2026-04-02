@@ -15,28 +15,40 @@ class QuickActionReceiver : BroadcastReceiver() {
             "com.clipboardsync.ACTION_MANUAL_SYNC" -> {
                 Thread {
                     val prefs = context.getSharedPreferences("clipboardsync_settings", Context.MODE_PRIVATE)
-                    val config = WebDavConfig(
-                        enabled = prefs.getBoolean("webdav_enabled", false),
-                        baseUrl = prefs.getString("webdav_base_url", "") ?: "",
-                        username = prefs.getString("webdav_username", "") ?: "",
-                        password = prefs.getString("webdav_password", "") ?: ""
+                    val secureStore = AndroidKeystoreStore(context)
+                    val identity = SyncCoordinator.ensureIdentity(secureStore)
+                    val settings = SyncSettingsSnapshot(
+                        webDavEnabled = prefs.getBoolean("webdav_enabled", false),
+                        webDavBaseUrl = prefs.getString("webdav_base_url", "") ?: "",
+                        webDavUsername = prefs.getString("webdav_username", "") ?: "",
+                        webDavPassword = prefs.getString("webdav_password", "") ?: "",
+                        publicRelayEnabled = prefs.getBoolean("public_relay_enabled", true),
+                        publicRelayBaseUrl = prefs.getString("public_relay_base_url", "https://kvdb.io") ?: "https://kvdb.io",
+                        publicRelayBucket = prefs.getString("public_relay_bucket", identity.first) ?: identity.first
+                    )
+                    val trustedDevices = SyncCoordinator.decodeTrustedDevices(prefs.getString("trusted_devices_json", null))
+                    val outgoingPreview = SyncCoordinator.readClipboardText(context).orEmpty().take(128)
+                    val result = SyncCoordinator.syncNow(
+                        context = context,
+                        secureStore = secureStore,
+                        prefs = prefs,
+                        settings = settings,
+                        trustedDevices = trustedDevices
                     )
 
-                    if (!config.enabled || config.baseUrl.isBlank()) {
-                        postToast(context, "WebDev not configured")
-                        return@Thread
+                    if (result.sentCount > 0 && outgoingPreview.isNotBlank()) {
+                        appendHistory(prefs, "out", "text/plain", outgoingPreview)
+                    }
+                    if (!result.receivedText.isNullOrBlank()) {
+                        appendHistory(prefs, "in", "text/plain", result.receivedText.take(128))
                     }
 
-                    val outText = "manual sync from quick action @${System.currentTimeMillis()}"
-                    val uploaded = WebDavClient.uploadText(config, outText)
-                    val remote = WebDavClient.downloadText(config)
-
-                    appendHistory(prefs, "out", "text/plain", outText)
-                    if (!remote.isNullOrBlank()) {
-                        appendHistory(prefs, "in", "text/plain", remote.take(128))
+                    if (result.errorMessage != null) {
+                        postToast(context, result.errorMessage)
+                    } else {
+                        postToast(context, "Manual sync completed")
                     }
 
-                    postToast(context, if (uploaded) "Manual sync completed" else "Manual sync failed")
                 }.start()
             }
             "com.clipboardsync.ACTION_PAUSE_SYNC" -> {

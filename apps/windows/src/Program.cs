@@ -121,9 +121,14 @@ internal static class Program
             ["workspaceKey"] = "工作空间 ID",
             ["deviceId"] = "设备唯一 ID",
             ["deviceName"] = "设备名称",
+            ["remoteDeviceId"] = "对端设备ID",
+            ["remoteDeviceName"] = "对端设备名",
+            ["remoteDeviceIdPlaceholder"] = "输入对端设备ID",
+            ["remoteDeviceNamePlaceholder"] = "输入备注名（可选）",
             ["copy"] = "复制",
             ["createInvite"] = "生成邀请",
             ["joinByInvite"] = "通过邀请码配对",
+            ["pairByDeviceId"] = "通过设备ID配对",
             ["inviteCode"] = "邀请码",
             ["invitePlaceholder"] = "粘贴对端邀请码",
             ["system"] = "跟随系统",
@@ -191,9 +196,14 @@ internal static class Program
             ["workspaceKey"] = "Workspace ID",
             ["deviceId"] = "Unique Device ID",
             ["deviceName"] = "Device Name",
+            ["remoteDeviceId"] = "Remote Device ID",
+            ["remoteDeviceName"] = "Remote Device Name",
+            ["remoteDeviceIdPlaceholder"] = "Enter remote device ID",
+            ["remoteDeviceNamePlaceholder"] = "Optional display name",
             ["copy"] = "Copy",
             ["createInvite"] = "Create Invite",
             ["joinByInvite"] = "Pair By Invite",
+            ["pairByDeviceId"] = "Pair By Device ID",
             ["inviteCode"] = "Invite Code",
             ["invitePlaceholder"] = "Paste remote invite code",
             ["system"] = "System",
@@ -278,6 +288,7 @@ internal static class Program
         pairingRequests.AddRange(LoadPairingRequests(store));
         status.TrustedDeviceCount = trustedDevices.Count;
         status.PendingPairingCount = pairingRequests.Count;
+        var relayLastAppliedBySender = LoadRelayLastAppliedBySender(store);
 
         void PersistRuntimeSnapshots() => SaveRuntimeSnapshots(store, trustedDevices, pairingRequests, history);
 
@@ -587,7 +598,148 @@ internal static class Program
         var autoSyncTimer = new System.Windows.Forms.Timer { Interval = 2500 };
         var syncInProgress = false;
         var lastUploadedText = string.Empty;
+        var lastUploadedTextByTarget = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         var lastAppliedRemoteText = string.Empty;
+
+        async Task<bool> UploadClipboardToPublicRelayByTargetsAsync(string text)
+        {
+            service.SavePublicRelaySettings(publicRelayUrlText.Text, publicRelayBucketText.Text, true);
+            var selfId = deviceId ?? string.Empty;
+            var peers = trustedDevices
+                .Where(x => !string.Equals(x.DeviceId, selfId, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+
+            if (peers.Count == 0)
+            {
+                if (string.Equals(lastUploadedText, text, StringComparison.Ordinal))
+                {
+                    return true;
+                }
+
+                var uploaded = await service.UploadClipboardToPublicRelayAsync(text);
+                if (uploaded)
+                {
+                    status.SyncedOutCount += 1;
+                    sentValue.Text = status.SyncedOutCount.ToString();
+                    lastUploadedText = text;
+                    history.Items.Insert(0, "[out] public · legacy · " + text);
+                }
+
+                return uploaded;
+            }
+
+            var allUploaded = true;
+            foreach (var peer in peers)
+            {
+                if (lastUploadedTextByTarget.TryGetValue(peer.DeviceId, out var lastText)
+                    && string.Equals(lastText, text, StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                var relayMessage = CreateRelayMessage(
+                    workspaceKey ?? string.Empty,
+                    selfId,
+                    peer.DeviceId,
+                    text,
+                    "windows");
+
+                var payload = JsonSerializer.Serialize(relayMessage);
+                var uploaded = await service.UploadClipboardToPublicRelayForDeviceAsync(payload, peer.DeviceId, selfId);
+                if (!uploaded)
+                {
+                    allUploaded = false;
+                    history.Items.Insert(0, "[error] public · upload failed · to " + peer.DeviceId);
+                    continue;
+                }
+
+                lastUploadedTextByTarget[peer.DeviceId] = text;
+                status.SyncedOutCount += 1;
+                sentValue.Text = status.SyncedOutCount.ToString();
+                history.Items.Insert(0, "[out] public · to " + peer.DeviceId + " · " + text);
+            }
+
+            return allUploaded;
+        }
+
+        async Task DownloadClipboardFromPublicRelayByTargetsAsync(string localText)
+        {
+            service.SavePublicRelaySettings(publicRelayUrlText.Text, publicRelayBucketText.Text, true);
+            var selfId = deviceId ?? string.Empty;
+            var peers = trustedDevices
+                .Where(x => !string.Equals(x.DeviceId, selfId, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+
+            foreach (var peer in peers)
+            {
+                var payload = await service.DownloadClipboardFromPublicRelayForDeviceAsync(selfId, peer.DeviceId);
+                if (string.IsNullOrWhiteSpace(payload))
+                {
+                    continue;
+                }
+
+                if (!TryParseRelayMessage(payload, out var relayMessage))
+                {
+                    if (string.Equals(payload, localText, StringComparison.Ordinal)
+                        || string.Equals(payload, lastAppliedRemoteText, StringComparison.Ordinal))
+                    {
+                        continue;
+                    }
+
+                    service.ApplyRemoteText(payload);
+                    lastAppliedRemoteText = payload;
+                    status.SyncedInCount += 1;
+                    recvValue.Text = status.SyncedInCount.ToString();
+                    history.Items.Insert(0, "[in] public · from " + peer.DeviceId + " · " + payload);
+                    return;
+                }
+
+                if (!string.Equals(relayMessage.ToDeviceId, selfId, StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(relayMessage.FromDeviceId, selfId, StringComparison.OrdinalIgnoreCase)
+                    || (!string.IsNullOrWhiteSpace(relayMessage.WorkspaceKey)
+                        && !string.Equals(relayMessage.WorkspaceKey, workspaceKey, StringComparison.Ordinal)))
+                {
+                    continue;
+                }
+
+                if (relayLastAppliedBySender.TryGetValue(relayMessage.FromDeviceId, out var appliedMessageId)
+                    && string.Equals(appliedMessageId, relayMessage.MessageId, StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                relayLastAppliedBySender[relayMessage.FromDeviceId] = relayMessage.MessageId;
+                SaveRelayLastAppliedBySender(store, relayLastAppliedBySender);
+
+                if (string.IsNullOrWhiteSpace(relayMessage.Text)
+                    || string.Equals(relayMessage.Text, localText, StringComparison.Ordinal)
+                    || string.Equals(relayMessage.Text, lastAppliedRemoteText, StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                service.ApplyRemoteText(relayMessage.Text);
+                lastAppliedRemoteText = relayMessage.Text;
+                status.SyncedInCount += 1;
+                recvValue.Text = status.SyncedInCount.ToString();
+                history.Items.Insert(0, "[in] public · from " + relayMessage.FromDeviceId + " · " + relayMessage.Text);
+                return;
+            }
+
+            var fallbackText = await service.DownloadClipboardFromPublicRelayAsync();
+            if (string.IsNullOrWhiteSpace(fallbackText)
+                || string.Equals(fallbackText, localText, StringComparison.Ordinal)
+                || string.Equals(fallbackText, lastAppliedRemoteText, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            service.ApplyRemoteText(fallbackText);
+            lastAppliedRemoteText = fallbackText;
+            status.SyncedInCount += 1;
+            recvValue.Text = status.SyncedInCount.ToString();
+            history.Items.Insert(0, "[in] public · legacy · " + fallbackText);
+        }
 
         async Task RunSharedClipboardSyncAsync(bool manualTriggered)
         {
@@ -600,6 +752,25 @@ internal static class Program
             try
             {
                 var localText = service.CaptureClipboard() ?? string.Empty;
+
+                if (publicRelayCheck.Checked)
+                {
+                    var uploadOk = true;
+                    if (!string.IsNullOrWhiteSpace(localText))
+                    {
+                        uploadOk = await UploadClipboardToPublicRelayByTargetsAsync(localText);
+                    }
+
+                    await DownloadClipboardFromPublicRelayByTargetsAsync(localText);
+
+                    status.ConnectionState = uploadOk ? SyncConnectionState.Connected : SyncConnectionState.Degraded;
+                    connectionValue.Text = status.ConnectionState.ToString();
+                    status.LastErrorMessage = uploadOk ? string.Empty : "public relay upload failed";
+                    errValue.Text = uploadOk ? "None" : status.LastErrorMessage;
+                    PersistRuntimeSnapshots();
+                    return;
+                }
+
                 if (!string.IsNullOrWhiteSpace(localText) && !string.Equals(localText, lastUploadedText, StringComparison.Ordinal))
                 {
                     var uploaded = await UploadClipboardToActiveChannelAsync(localText);
@@ -738,7 +909,8 @@ internal static class Program
         devicesTab.Controls.Add(deviceGrid);
 
         var pairingGrid = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 2, ColumnCount = 1, Padding = new Padding(16) };
-        pairingGrid.RowCount = 4;
+        pairingGrid.RowCount = 5;
+        pairingGrid.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         pairingGrid.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         pairingGrid.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         pairingGrid.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
@@ -775,6 +947,16 @@ internal static class Program
         var copyInviteButton = new Button { Text = T(locale, "copy"), Width = 70, Height = 30 };
         var inviteCodeInput = new TextBox { Width = 350, PlaceholderText = T(locale, "invitePlaceholder") };
         var joinInviteButton = new Button { Text = T(locale, "joinByInvite"), Width = 130, Height = 30 };
+        var directPairPanel = new FlowLayoutPanel
+        {
+            AutoSize = true,
+            WrapContents = true,
+            FlowDirection = FlowDirection.LeftToRight,
+            Dock = DockStyle.Top
+        };
+        var directDeviceIdInput = new TextBox { Width = 320, PlaceholderText = T(locale, "remoteDeviceIdPlaceholder") };
+        var directDeviceNameInput = new TextBox { Width = 220, PlaceholderText = T(locale, "remoteDeviceNamePlaceholder") };
+        var pairByDeviceIdButton = new Button { Text = T(locale, "pairByDeviceId"), Width = 150, Height = 30 };
 
         createInviteButton.Click += (_, _) =>
         {
@@ -811,6 +993,34 @@ internal static class Program
             }
         };
 
+        pairByDeviceIdButton.Click += (_, _) =>
+        {
+            var remoteDeviceId = directDeviceIdInput.Text?.Trim() ?? string.Empty;
+            var remoteDeviceName = directDeviceNameInput.Text?.Trim() ?? string.Empty;
+
+            if (string.IsNullOrWhiteSpace(remoteDeviceId))
+            {
+                status.LastErrorMessage = "Remote device ID is empty";
+                errValue.Text = status.LastErrorMessage;
+                return;
+            }
+
+            if (string.Equals(remoteDeviceId, deviceId, StringComparison.OrdinalIgnoreCase))
+            {
+                status.LastErrorMessage = "Cannot pair with current device";
+                errValue.Text = status.LastErrorMessage;
+                return;
+            }
+
+            AddOrUpdateTrustedDevice(remoteDeviceId, string.IsNullOrWhiteSpace(remoteDeviceName) ? remoteDeviceId : remoteDeviceName);
+            directDeviceIdInput.Text = string.Empty;
+            directDeviceNameInput.Text = string.Empty;
+            status.LastErrorMessage = string.Empty;
+            errValue.Text = "None";
+            history.Items.Insert(0, "[event] pairing · direct-id " + remoteDeviceId);
+            PersistRuntimeSnapshots();
+        };
+
         invitePanel.Controls.Add(new Label { Text = T(locale, "deviceName"), AutoSize = true, Padding = new Padding(0, 7, 0, 0) });
         invitePanel.Controls.Add(inviteNameText);
         invitePanel.Controls.Add(createInviteButton);
@@ -818,6 +1028,12 @@ internal static class Program
         invitePanel.Controls.Add(copyInviteButton);
         invitePanel.Controls.Add(inviteCodeInput);
         invitePanel.Controls.Add(joinInviteButton);
+
+        directPairPanel.Controls.Add(new Label { Text = T(locale, "remoteDeviceId"), AutoSize = true, Padding = new Padding(0, 7, 0, 0) });
+        directPairPanel.Controls.Add(directDeviceIdInput);
+        directPairPanel.Controls.Add(new Label { Text = T(locale, "remoteDeviceName"), AutoSize = true, Padding = new Padding(0, 7, 0, 0) });
+        directPairPanel.Controls.Add(directDeviceNameInput);
+        directPairPanel.Controls.Add(pairByDeviceIdButton);
 
         var pairingSearch = new TextBox { Dock = DockStyle.Top, PlaceholderText = "Search requests..." };
         pairingSearch.AccessibleName = "Pairing Search";
@@ -953,11 +1169,12 @@ internal static class Program
         pairingActions.Controls.Add(approve);
         pairingActions.Controls.Add(reject);
         pairingGrid.Controls.Add(invitePanel, 0, 0);
-        pairingGrid.Controls.Add(pairingSearch, 0, 1);
-        pairingGrid.Controls.Add(pairingList, 0, 2);
-        pairingGrid.Controls.Add(pairingActions, 0, 3);
-        pairingGrid.Controls.Add(pairingEmptyHint, 0, 3);
-        pairingGrid.Controls.Add(pairingClearFilter, 0, 3);
+        pairingGrid.Controls.Add(directPairPanel, 0, 1);
+        pairingGrid.Controls.Add(pairingSearch, 0, 2);
+        pairingGrid.Controls.Add(pairingList, 0, 3);
+        pairingGrid.Controls.Add(pairingActions, 0, 4);
+        pairingGrid.Controls.Add(pairingEmptyHint, 0, 4);
+        pairingGrid.Controls.Add(pairingClearFilter, 0, 4);
         pairingTab.Controls.Add(pairingGrid);
 
         historyTab.Controls.Add(history);
@@ -1012,6 +1229,9 @@ internal static class Program
                 joinInviteButton.Text = T(locale, "joinByInvite");
                 copyInviteButton.Text = T(locale, "copy");
                 inviteCodeInput.PlaceholderText = T(locale, "invitePlaceholder");
+                pairByDeviceIdButton.Text = T(locale, "pairByDeviceId");
+                directDeviceIdInput.PlaceholderText = T(locale, "remoteDeviceIdPlaceholder");
+                directDeviceNameInput.PlaceholderText = T(locale, "remoteDeviceNamePlaceholder");
             }
         };
 
@@ -1146,6 +1366,9 @@ internal static class Program
                 createInviteButton.Text = T(locale, "createInvite");
                 joinInviteButton.Text = T(locale, "joinByInvite");
                 copyInviteButton.Text = T(locale, "copy");
+                pairByDeviceIdButton.Text = T(locale, "pairByDeviceId");
+                directDeviceIdInput.PlaceholderText = T(locale, "remoteDeviceIdPlaceholder");
+                directDeviceNameInput.PlaceholderText = T(locale, "remoteDeviceNamePlaceholder");
                 copyWorkspace.Text = T(locale, "copy");
                 copyDeviceId.Text = T(locale, "copy");
             }
@@ -1255,6 +1478,97 @@ internal static class Program
         public string DeviceId { get; set; } = string.Empty;
         public string DeviceName { get; set; } = string.Empty;
         public string Platform { get; set; } = "windows";
+    }
+
+    private sealed class RelayMessage
+    {
+        public string MessageId { get; set; } = string.Empty;
+        public string WorkspaceKey { get; set; } = string.Empty;
+        public string FromDeviceId { get; set; } = string.Empty;
+        public string ToDeviceId { get; set; } = string.Empty;
+        public string Text { get; set; } = string.Empty;
+        public string SentAt { get; set; } = string.Empty;
+        public string Client { get; set; } = "windows";
+    }
+
+    private static RelayMessage CreateRelayMessage(string workspaceKey, string fromDeviceId, string toDeviceId, string text, string client)
+    {
+        return new RelayMessage
+        {
+            MessageId = Guid.NewGuid().ToString("N"),
+            WorkspaceKey = workspaceKey,
+            FromDeviceId = fromDeviceId,
+            ToDeviceId = toDeviceId,
+            Text = text,
+            SentAt = DateTime.UtcNow.ToString("O"),
+            Client = client
+        };
+    }
+
+    private static bool TryParseRelayMessage(string raw, out RelayMessage message)
+    {
+        message = new RelayMessage();
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            return false;
+        }
+
+        try
+        {
+            var payload = JsonSerializer.Deserialize<RelayMessage>(raw);
+            if (payload is null
+                || string.IsNullOrWhiteSpace(payload.MessageId)
+                || string.IsNullOrWhiteSpace(payload.FromDeviceId)
+                || string.IsNullOrWhiteSpace(payload.ToDeviceId))
+            {
+                return false;
+            }
+
+            message = payload;
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static Dictionary<string, string> LoadRelayLastAppliedBySender(ISecureStore store)
+    {
+        var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var raw = store.Get("relay_last_applied_json");
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            return map;
+        }
+
+        try
+        {
+            var payload = JsonSerializer.Deserialize<Dictionary<string, string>>(raw);
+            if (payload is null)
+            {
+                return map;
+            }
+
+            foreach (var pair in payload)
+            {
+                if (!string.IsNullOrWhiteSpace(pair.Key) && !string.IsNullOrWhiteSpace(pair.Value))
+                {
+                    map[pair.Key] = pair.Value;
+                }
+            }
+        }
+        catch
+        {
+            return map;
+        }
+
+        return map;
+    }
+
+    private static void SaveRelayLastAppliedBySender(ISecureStore store, Dictionary<string, string> map)
+    {
+        store.Set("relay_last_applied_json", JsonSerializer.Serialize(map));
     }
 
     private static string GenerateDeviceId()

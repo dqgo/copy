@@ -25,6 +25,7 @@ public sealed class SyncService
 {
     private const string DefaultPublicRelayBaseUrl = "https://kvdb.io";
     private const string PublicRelayClipboardKey = "clipboard-sync-text";
+    private const string RoutedRelayKeyPrefix = "clipboard";
 
     private readonly IClipboardReader _reader;
     private readonly IClipboardWriter _writer;
@@ -164,6 +165,34 @@ public sealed class SyncService
         }
     }
 
+    public async Task<bool> UploadClipboardToPublicRelayForDeviceAsync(
+        string text,
+        string toDeviceId,
+        string fromDeviceId,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var cfg = LoadPublicRelaySettings();
+            if (!cfg.Enabled || string.IsNullOrWhiteSpace(cfg.Bucket) || string.IsNullOrWhiteSpace(toDeviceId) || string.IsNullOrWhiteSpace(fromDeviceId))
+            {
+                return false;
+            }
+
+            using var client = BuildPublicRelayClient(cfg.BaseUrl);
+            using var content = new StringContent(text, Encoding.UTF8, "text/plain");
+            using var response = await client.PutAsync(
+                BuildPublicRelayPath(cfg.Bucket, BuildRoutedPublicRelayKey(toDeviceId, fromDeviceId)),
+                content,
+                cancellationToken).ConfigureAwait(false);
+            return response.IsSuccessStatusCode;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
     public async Task<string?> DownloadClipboardFromPublicRelayAsync(CancellationToken cancellationToken = default)
     {
         try
@@ -176,6 +205,36 @@ public sealed class SyncService
 
             using var client = BuildPublicRelayClient(cfg.BaseUrl);
             using var response = await client.GetAsync(BuildPublicRelayPath(cfg.Bucket, PublicRelayClipboardKey), cancellationToken).ConfigureAwait(false);
+            if (!response.IsSuccessStatusCode)
+            {
+                return null;
+            }
+
+            return await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    public async Task<string?> DownloadClipboardFromPublicRelayForDeviceAsync(
+        string toDeviceId,
+        string fromDeviceId,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var cfg = LoadPublicRelaySettings();
+            if (!cfg.Enabled || string.IsNullOrWhiteSpace(cfg.Bucket) || string.IsNullOrWhiteSpace(toDeviceId) || string.IsNullOrWhiteSpace(fromDeviceId))
+            {
+                return null;
+            }
+
+            using var client = BuildPublicRelayClient(cfg.BaseUrl);
+            using var response = await client.GetAsync(
+                BuildPublicRelayPath(cfg.Bucket, BuildRoutedPublicRelayKey(toDeviceId, fromDeviceId)),
+                cancellationToken).ConfigureAwait(false);
             if (!response.IsSuccessStatusCode)
             {
                 return null;
@@ -290,5 +349,14 @@ public sealed class SyncService
     private static string BuildPublicRelayPath(string bucket, string key)
     {
         return Uri.EscapeDataString(bucket.Trim()) + "/" + Uri.EscapeDataString(key.Trim());
+    }
+
+    private static string BuildRoutedPublicRelayKey(string toDeviceId, string fromDeviceId)
+    {
+        return RoutedRelayKeyPrefix
+            + "-"
+            + toDeviceId.Trim().ToLowerInvariant()
+            + "-"
+            + fromDeviceId.Trim().ToLowerInvariant();
     }
 }

@@ -1,7 +1,9 @@
-name: Build All Programs
+name: Build And Release All Programs
 
 on:
   push:
+    tags-ignore:
+      - "*"
   pull_request:
   workflow_dispatch:
 
@@ -29,16 +31,43 @@ jobs:
       - name: Build TypeScript Packages
         run: npm run build
 
+      - name: Package Node Outputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+          tar -czf artifacts/node-packages-dist.tar.gz \
+            packages/protocol-spec/dist \
+            packages/crypto-spec/dist \
+            packages/sync-simulator/dist \
+            packages/app-core/dist \
+            packages/custom-sync-server/dist
+
+      - name: Upload Node Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: node-packages-dist
+          path: artifacts/node-packages-dist.tar.gz
+          if-no-files-found: error
+
   build_windows_dotnet:
     name: Build Windows .NET Projects
     runs-on: windows-latest
     strategy:
       fail-fast: false
       matrix:
-        project:
-          - apps/windows/ClipboardSync.Windows.csproj
-          - apps/windows-winui/ClipboardSync.Windows.WinUI.csproj
-          - scripts/validation/windows-scenario-runner/windows-scenario-runner.csproj
+        include:
+          - name: winforms
+            project: apps/windows/ClipboardSync.Windows.csproj
+            publish: true
+            output: artifacts/windows-winforms
+          - name: winui3
+            project: apps/windows-winui/ClipboardSync.Windows.WinUI.csproj
+            publish: true
+            output: artifacts/windows-winui3
+          - name: validation-runner
+            project: scripts/validation/windows-scenario-runner/windows-scenario-runner.csproj
+            publish: false
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -53,8 +82,29 @@ jobs:
         run: dotnet restore ${{ matrix.project }}
 
       - name: Build
+        if: ${{ !matrix.publish }}
         shell: pwsh
         run: dotnet build ${{ matrix.project }} -c Release --no-restore
+
+      - name: Publish
+        if: ${{ matrix.publish }}
+        shell: pwsh
+        run: dotnet publish ${{ matrix.project }} -c Release --no-restore -o ${{ matrix.output }}
+
+      - name: Archive Windows Output
+        if: ${{ matrix.publish }}
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path artifacts | Out-Null
+          Compress-Archive -Path "${{ matrix.output }}\*" -DestinationPath "artifacts\${{ matrix.name }}.zip" -Force
+
+      - name: Upload Windows Artifact
+        if: ${{ matrix.publish }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-${{ matrix.name }}
+          path: artifacts/${{ matrix.name }}.zip
+          if-no-files-found: error
 
   build_android:
     name: Build Android App
@@ -80,6 +130,13 @@ jobs:
       - name: Build Android Release
         working-directory: apps/android
         run: gradle assembleRelease
+
+      - name: Upload Android Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-apk
+          path: apps/android/app/build/outputs/apk/release/**/*.apk
+          if-no-files-found: error
 
   build_apple_sources:
     name: Build Apple Swift Sources
@@ -117,3 +174,57 @@ jobs:
           else
             echo "macOS source directory not found."
           fi
+
+      - name: Package Apple Typecheck Report
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+          {
+            echo "Apple source typecheck passed"
+            echo "commit: ${GITHUB_SHA}"
+            echo "run: ${GITHUB_RUN_NUMBER}"
+          } > artifacts/apple-typecheck.txt
+
+      - name: Upload Apple Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: apple-typecheck-report
+          path: artifacts/apple-typecheck.txt
+          if-no-files-found: error
+
+  publish_release:
+    name: Publish GitHub Release
+    if: ${{ github.event_name == 'push' }}
+    needs:
+      - build_node_packages
+      - build_windows_dotnet
+      - build_android
+      - build_apple_sources
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download All Build Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+
+      - name: Compose Release Metadata
+        id: meta
+        shell: bash
+        run: |
+          set -euo pipefail
+          short_sha="${GITHUB_SHA::7}"
+          echo "tag=build-${GITHUB_RUN_NUMBER}-${short_sha}" >> "$GITHUB_OUTPUT"
+          echo "name=Build ${GITHUB_RUN_NUMBER} (${short_sha})" >> "$GITHUB_OUTPUT"
+
+      - name: Publish Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.meta.outputs.tag }}
+          name: ${{ steps.meta.outputs.name }}
+          prerelease: true
+          generate_release_notes: true
+          files: |
+            release-assets/**/*

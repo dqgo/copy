@@ -47,11 +47,11 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.isSystemInDarkTheme
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
@@ -66,6 +66,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
@@ -100,11 +102,25 @@ object AppStrings {
             "testWebdev" to "测试 WebDev 连接",
             "webdevOk" to "WebDev 连接成功",
             "webdevFail" to "WebDev 连接失败",
+            "publicRelay" to "启用免费公共服务器",
+            "publicRelayUrl" to "公共服务器地址",
+            "publicRelayBucket" to "共享桶 ID",
+            "testPublicRelay" to "测试公共服务器",
+            "publicRelayFail" to "公共服务器连接失败",
             "server" to "本地服务模式",
             "manualSync" to "手动同步",
             "sendHtml" to "发送 HTML",
             "sendImage" to "发送图片",
             "sendFile" to "发送文件",
+            "deviceId" to "设备唯一 ID",
+            "deviceName" to "设备名称",
+            "remoteDeviceId" to "对端设备 ID",
+            "remoteDeviceName" to "对端设备名",
+            "pairByDeviceId" to "通过设备ID配对",
+            "createInvite" to "生成邀请",
+            "joinByInvite" to "通过邀请码配对",
+            "invitePlaceholder" to "粘贴对端邀请码",
+            "copy" to "复制",
             "lastError" to "最近错误",
             "noDevices" to "暂无设备",
             "noPairingRequests" to "暂无配对请求",
@@ -146,11 +162,25 @@ object AppStrings {
             "testWebdev" to "Test WebDev Connection",
             "webdevOk" to "WebDev connection succeeded",
             "webdevFail" to "WebDev connection failed",
+            "publicRelay" to "Enable Free Public Relay",
+            "publicRelayUrl" to "Public Relay URL",
+            "publicRelayBucket" to "Shared Bucket ID",
+            "testPublicRelay" to "Test Public Relay",
+            "publicRelayFail" to "Public relay connection failed",
             "server" to "Local Server Mode",
             "manualSync" to "Manual Sync",
             "sendHtml" to "Send HTML",
             "sendImage" to "Send Image",
             "sendFile" to "Send File",
+            "deviceId" to "Unique Device ID",
+            "deviceName" to "Device Name",
+            "remoteDeviceId" to "Remote Device ID",
+            "remoteDeviceName" to "Remote Device Name",
+            "pairByDeviceId" to "Pair By Device ID",
+            "createInvite" to "Create Invite",
+            "joinByInvite" to "Pair By Invite",
+            "invitePlaceholder" to "Paste remote invite code",
+            "copy" to "Copy",
             "lastError" to "Last Error",
             "noDevices" to "No devices",
             "noPairingRequests" to "No pairing requests",
@@ -183,12 +213,23 @@ data class SettingsUi(
     val webDevBaseUrl: String,
     val webDevUsername: String,
     val webDevPassword: String,
+    val publicRelayEnabled: Boolean,
+    val publicRelayBaseUrl: String,
+    val publicRelayBucket: String,
     val localServerEnabled: Boolean,
     val pairingPolicy: String
 )
-data class PairingRequestUi(val requestId: String, val displayName: String, val platform: String, val at: String)
+data class PairingRequestUi(
+    val requestId: String,
+    val deviceId: String,
+    val displayName: String,
+    val platform: String,
+    val at: String
+)
 
 data class DashboardState(
+    val workspaceKey: String,
+    val deviceId: String,
     val status: StatusViewModel,
     val devices: List<TrustedDeviceUi>,
     val history: List<HistoryUi>,
@@ -205,9 +246,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val secureStore = AndroidKeystoreStore(this)
-        if (secureStore.get("workspace_key") == null) {
-            secureStore.set("workspace_key", "wsk-android-${System.currentTimeMillis()}")
-        }
+        SyncCoordinator.ensureIdentity(secureStore)
         val quickServiceIntent = Intent(this, SyncQuickActionService::class.java)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             startForegroundService(quickServiceIntent)
@@ -246,6 +285,10 @@ class MainActivity : ComponentActivity() {
 private fun ClipboardSyncAndroidApp() {
     val context = LocalContext.current
     val prefs = remember { context.getSharedPreferences("clipboardsync_settings", Context.MODE_PRIVATE) }
+    val secureStore = remember { AndroidKeystoreStore(context) }
+    val identity = remember { SyncCoordinator.ensureIdentity(secureStore) }
+    val workspaceKey = identity.first
+    val deviceId = identity.second
     val initialDevices = remember { decodeTrustedDevices(prefs.getString("trusted_devices_json", null)) }
     val initialHistory = remember { decodeHistoryItems(prefs.getString("history_items_json", null)) }
     val initialPairing = remember { decodePairingRequests(prefs.getString("pairing_requests_json", null)) }
@@ -258,6 +301,8 @@ private fun ClipboardSyncAndroidApp() {
     var state by remember {
         mutableStateOf(
             DashboardState(
+                workspaceKey = workspaceKey,
+                deviceId = deviceId,
                 status = StatusViewModel(
                     connectionState = SyncConnectionState.DISCONNECTED,
                     syncedOutCount = 0,
@@ -278,6 +323,9 @@ private fun ClipboardSyncAndroidApp() {
                     webDevBaseUrl = prefs.getString("webdav_base_url", "") ?: "",
                     webDevUsername = prefs.getString("webdav_username", "") ?: "",
                     webDevPassword = prefs.getString("webdav_password", "") ?: "",
+                    publicRelayEnabled = prefs.getBoolean("public_relay_enabled", true),
+                    publicRelayBaseUrl = prefs.getString("public_relay_base_url", "https://kvdb.io") ?: "https://kvdb.io",
+                    publicRelayBucket = prefs.getString("public_relay_bucket", workspaceKey) ?: workspaceKey,
                     localServerEnabled = prefs.getBoolean("local_server_enabled", false),
                     pairingPolicy = prefs.getString("pairing_policy", "manual-approve") ?: "manual-approve"
                 ),
@@ -286,6 +334,74 @@ private fun ClipboardSyncAndroidApp() {
         )
     }
     val coroutineScope = rememberCoroutineScope()
+    var syncInProgress by remember { mutableStateOf(false) }
+    var generatedInviteCode by remember { mutableStateOf("") }
+
+    fun runSync(trigger: String) {
+        if (syncInProgress) {
+            return
+        }
+        if (prefs.getBoolean("sync_paused", false)) {
+            state = state.copy(
+                status = state.status.copy(lastErrorMessage = "sync paused"),
+                errorMessage = "Sync is paused. Resume from quick action first."
+            )
+            return
+        }
+
+        val outgoingPreview = SyncCoordinator.readClipboardText(context).orEmpty().take(64)
+        coroutineScope.launch {
+            syncInProgress = true
+            try {
+                val snapshot = state
+                val result = withContext(Dispatchers.IO) {
+                    SyncCoordinator.syncNow(
+                        context = context,
+                        secureStore = secureStore,
+                        prefs = prefs,
+                        settings = SyncSettingsSnapshot(
+                            webDavEnabled = snapshot.settings.webDevEnabled,
+                            webDavBaseUrl = snapshot.settings.webDevBaseUrl,
+                            webDavUsername = snapshot.settings.webDevUsername,
+                            webDavPassword = snapshot.settings.webDevPassword,
+                            publicRelayEnabled = snapshot.settings.publicRelayEnabled,
+                            publicRelayBaseUrl = snapshot.settings.publicRelayBaseUrl,
+                            publicRelayBucket = snapshot.settings.publicRelayBucket
+                        ),
+                        trustedDevices = snapshot.devices
+                    )
+                }
+
+                val current = state
+                val mergedHistory = buildList {
+                    if (result.receivedText != null) {
+                        add(HistoryUi("in", "text/plain", result.receivedText.take(128), "now"))
+                    }
+                    if (result.sentCount > 0 && outgoingPreview.isNotBlank()) {
+                        add(HistoryUi("out", "text/plain", outgoingPreview, "now"))
+                    }
+                    if (trigger == "auto" && result.sentCount == 0 && result.receivedText == null) {
+                        addAll(current.history.take(299))
+                    } else {
+                        addAll(current.history)
+                    }
+                }.take(300)
+
+                state = current.copy(
+                    status = current.status.copy(
+                        connectionState = if (result.errorMessage == null) SyncConnectionState.CONNECTED else SyncConnectionState.DEGRADED,
+                        syncedOutCount = current.status.syncedOutCount + result.sentCount,
+                        syncedInCount = current.status.syncedInCount + if (result.receivedText != null) 1 else 0,
+                        lastErrorMessage = result.errorMessage ?: "None"
+                    ),
+                    history = mergedHistory,
+                    errorMessage = result.errorMessage
+                )
+            } finally {
+                syncInProgress = false
+            }
+        }
+    }
 
     val filteredDevices = state.devices.filter {
         val q = deviceQuery.trim().lowercase()
@@ -297,7 +413,10 @@ private fun ClipboardSyncAndroidApp() {
     }
     val filteredPairing = state.pairingRequests.filter {
         val q = pairingQuery.trim().lowercase()
-        q.isEmpty() || it.displayName.lowercase().contains(q) || it.platform.lowercase().contains(q)
+        q.isEmpty()
+            || it.displayName.lowercase().contains(q)
+            || it.platform.lowercase().contains(q)
+            || it.deviceId.lowercase().contains(q)
     }
 
     LaunchedEffect(state.devices, state.history, state.pairingRequests) {
@@ -306,6 +425,28 @@ private fun ClipboardSyncAndroidApp() {
             .putString("history_items_json", encodeHistoryItems(state.history))
             .putString("pairing_requests_json", encodePairingRequests(state.pairingRequests))
             .apply()
+    }
+
+    LaunchedEffect(
+        state.settings.syncMode,
+        state.settings.webDevEnabled,
+        state.settings.webDevBaseUrl,
+        state.settings.publicRelayEnabled,
+        state.settings.publicRelayBaseUrl,
+        state.settings.publicRelayBucket,
+        state.devices,
+        state.workspaceKey,
+        state.deviceId
+    ) {
+        if (state.settings.syncMode != "auto") {
+            return@LaunchedEffect
+        }
+        while (isActive && state.settings.syncMode == "auto") {
+            if (!syncInProgress && !prefs.getBoolean("sync_paused", false)) {
+                runSync("auto")
+            }
+            delay(2500)
+        }
     }
 
     MaterialTheme {
@@ -364,52 +505,7 @@ private fun ClipboardSyncAndroidApp() {
                             0 -> StatusTab(
                                 status = state.status,
                                 language = state.settings.language,
-                                onManualSync = {
-                                    if (prefs.getBoolean("sync_paused", false)) {
-                                        state = state.copy(
-                                            status = state.status.copy(lastErrorMessage = "sync paused"),
-                                            errorMessage = "Sync is paused. Resume from quick action first."
-                                        )
-                                        return@StatusTab
-                                    }
-                                    val webdev = state.settings.webDevEnabled && state.settings.webDevBaseUrl.isNotBlank()
-                                    if (webdev) {
-                                        val cfg = WebDavConfig(
-                                            enabled = true,
-                                            baseUrl = state.settings.webDevBaseUrl,
-                                            username = state.settings.webDevUsername,
-                                            password = state.settings.webDevPassword
-                                        )
-                                        coroutineScope.launch(Dispatchers.IO) {
-                                            val outText = "manual sync from android @${System.currentTimeMillis()}"
-                                            val uploaded = WebDavClient.uploadText(cfg, outText)
-                                            val remote = WebDavClient.downloadText(cfg)
-                                            withContext(Dispatchers.Main) {
-                                                state = state.copy(
-                                                    status = state.status.copy(
-                                                        syncedOutCount = state.status.syncedOutCount + if (uploaded) 1 else 0,
-                                                        syncedInCount = state.status.syncedInCount + if (remote != null) 1 else 0,
-                                                        lastErrorMessage = if (uploaded) "None" else "webdev upload failed"
-                                                    ),
-                                                    history = buildList {
-                                                        if (remote != null) add(HistoryUi("in", "text/plain", remote.take(64), "now"))
-                                                        if (uploaded) add(HistoryUi("out", "text/plain", outText, "now"))
-                                                        addAll(state.history)
-                                                    }
-                                                )
-                                            }
-                                        }
-                                    } else {
-                                        state = state.copy(
-                                            status = state.status.copy(
-                                                syncedOutCount = state.status.syncedOutCount + 1,
-                                                syncedInCount = state.status.syncedInCount + 1,
-                                                lastErrorMessage = "None"
-                                            ),
-                                            history = listOf(HistoryUi("out", "text/plain", "manual sync", "now")) + state.history
-                                        )
-                                    }
-                                },
+                                onManualSync = { runSync("manual") },
                                 onSendHtml = {
                                     state = state.copy(
                                         status = state.status.copy(syncedOutCount = state.status.syncedOutCount + 1),
@@ -460,12 +556,184 @@ private fun ClipboardSyncAndroidApp() {
                                 language = state.settings.language,
                                 query = pairingQuery,
                                 onQueryChange = { pairingQuery = it },
+                                localDeviceId = state.deviceId,
+                                inviteCode = generatedInviteCode,
+                                onCopyLocalDeviceId = {
+                                    SyncCoordinator.writeClipboardText(context, state.deviceId)
+                                    state = state.copy(
+                                        history = listOf(HistoryUi("event", "pairing", "device id copied", "now")) + state.history,
+                                        errorMessage = null
+                                    )
+                                },
+                                onCreateInvite = { deviceName ->
+                                    val safeName = deviceName.ifBlank { Build.MODEL ?: "Android" }
+                                    generatedInviteCode = SyncCoordinator.createInviteCode(
+                                        workspaceKey = state.workspaceKey,
+                                        deviceId = state.deviceId,
+                                        deviceName = safeName,
+                                        platform = "android"
+                                    )
+                                    state = state.copy(
+                                        history = listOf(HistoryUi("event", "pairing", "invite created", "now")) + state.history,
+                                        errorMessage = null
+                                    )
+                                },
+                                onCopyInvite = {
+                                    if (generatedInviteCode.isNotBlank()) {
+                                        SyncCoordinator.writeClipboardText(context, generatedInviteCode)
+                                        state = state.copy(
+                                            history = listOf(HistoryUi("event", "pairing", "invite copied", "now")) + state.history,
+                                            errorMessage = null
+                                        )
+                                    }
+                                },
+                                onJoinInvite = { inviteCodeInput ->
+                                    val payload = SyncCoordinator.tryParseInviteCode(inviteCodeInput)
+                                    if (payload == null) {
+                                        state = state.copy(
+                                            status = state.status.copy(lastErrorMessage = "invite parse failed"),
+                                            errorMessage = "Invite code format error"
+                                        )
+                                        return@PairingTab
+                                    }
+
+                                    if (payload.deviceId.equals(state.deviceId, ignoreCase = true)) {
+                                        state = state.copy(
+                                            status = state.status.copy(lastErrorMessage = "Cannot pair with current device"),
+                                            errorMessage = "Cannot pair with current device"
+                                        )
+                                        return@PairingTab
+                                    }
+
+                                    var next = state
+                                    if (payload.workspaceKey.isNotBlank() && payload.workspaceKey != state.workspaceKey) {
+                                        secureStore.set("workspace_key", payload.workspaceKey)
+                                        val nextBucket = if (
+                                            state.settings.publicRelayBucket.isBlank()
+                                            || state.settings.publicRelayBucket == state.workspaceKey
+                                        ) payload.workspaceKey else state.settings.publicRelayBucket
+                                        prefs.edit().putString("public_relay_bucket", nextBucket).apply()
+                                        next = next.copy(
+                                            workspaceKey = payload.workspaceKey,
+                                            settings = next.settings.copy(publicRelayBucket = nextBucket)
+                                        )
+                                    }
+
+                                    val autoApprove = next.settings.pairingPolicy == "auto-approve-invite"
+                                    if (autoApprove) {
+                                        val exists = next.devices.any { it.deviceId.equals(payload.deviceId, ignoreCase = true) }
+                                        val updatedDevices = if (exists) {
+                                            next.devices.map {
+                                                if (it.deviceId.equals(payload.deviceId, ignoreCase = true)) {
+                                                    it.copy(displayName = payload.deviceName, lastSeen = "now")
+                                                } else {
+                                                    it
+                                                }
+                                            }
+                                        } else {
+                                            listOf(TrustedDeviceUi(payload.deviceId, payload.deviceName, "now")) + next.devices
+                                        }
+                                        next = next.copy(
+                                            devices = updatedDevices,
+                                            status = next.status.copy(trustedDeviceCount = updatedDevices.size),
+                                            history = listOf(HistoryUi("event", "pairing", "approved ${payload.deviceName}", "now")) + next.history
+                                        )
+                                    } else {
+                                        if (next.pairingRequests.any {
+                                                it.displayName.equals(payload.deviceName, ignoreCase = true)
+                                                    && it.platform.equals(payload.platform, ignoreCase = true)
+                                            }) {
+                                            state = state.copy(
+                                                status = state.status.copy(lastErrorMessage = "Pairing request already exists"),
+                                                errorMessage = "Pairing request already exists"
+                                            )
+                                            return@PairingTab
+                                        }
+                                        val updatedRequests = listOf(
+                                            PairingRequestUi(
+                                                "req-${java.util.UUID.randomUUID().toString().replace("-", "")}",
+                                                payload.deviceId,
+                                                payload.deviceName,
+                                                payload.platform,
+                                                "now"
+                                            )
+                                        ) + next.pairingRequests
+                                        next = next.copy(
+                                            pairingRequests = updatedRequests,
+                                            status = next.status.copy(pendingPairingCount = updatedRequests.size),
+                                            history = listOf(HistoryUi("event", "pairing", "request from ${payload.deviceName}", "now")) + next.history
+                                        )
+                                    }
+
+                                    state = next.copy(
+                                        status = next.status.copy(lastErrorMessage = "None"),
+                                        errorMessage = null
+                                    )
+                                },
+                                onPairByDeviceId = { remoteId, remoteName ->
+                                    val safeRemoteId = remoteId.trim()
+                                    if (safeRemoteId.isBlank()) {
+                                        state = state.copy(
+                                            status = state.status.copy(lastErrorMessage = "Remote device ID is empty"),
+                                            errorMessage = "Remote device ID is empty"
+                                        )
+                                        return@PairingTab
+                                    }
+                                    if (safeRemoteId.equals(state.deviceId, ignoreCase = true)) {
+                                        state = state.copy(
+                                            status = state.status.copy(lastErrorMessage = "Cannot pair with current device"),
+                                            errorMessage = "Cannot pair with current device"
+                                        )
+                                        return@PairingTab
+                                    }
+
+                                    val safeName = remoteName.trim().ifBlank { safeRemoteId }
+                                    val exists = state.devices.any { it.deviceId.equals(safeRemoteId, ignoreCase = true) }
+                                    val updatedDevices = if (exists) {
+                                        state.devices.map {
+                                            if (it.deviceId.equals(safeRemoteId, ignoreCase = true)) {
+                                                it.copy(displayName = safeName, lastSeen = "now")
+                                            } else {
+                                                it
+                                            }
+                                        }
+                                    } else {
+                                        listOf(TrustedDeviceUi(safeRemoteId, safeName, "now")) + state.devices
+                                    }
+
+                                    state = state.copy(
+                                        devices = updatedDevices,
+                                        status = state.status.copy(
+                                            trustedDeviceCount = updatedDevices.size,
+                                            lastErrorMessage = "None"
+                                        ),
+                                        history = listOf(HistoryUi("event", "pairing", "direct-id $safeRemoteId", "now")) + state.history,
+                                        errorMessage = null
+                                    )
+                                },
                                 onApprove = { requestId ->
                                     val request = state.pairingRequests.find { it.requestId == requestId }
+                                    val updatedDevices = if (request == null) {
+                                        state.devices
+                                    } else {
+                                        val exists = state.devices.any { it.deviceId.equals(request.deviceId, ignoreCase = true) }
+                                        if (exists) {
+                                            state.devices.map {
+                                                if (it.deviceId.equals(request.deviceId, ignoreCase = true)) {
+                                                    it.copy(displayName = request.displayName, lastSeen = "now")
+                                                } else {
+                                                    it
+                                                }
+                                            }
+                                        } else {
+                                            listOf(TrustedDeviceUi(request.deviceId, request.displayName, "now")) + state.devices
+                                        }
+                                    }
                                     state = state.copy(
+                                        devices = updatedDevices,
                                         pairingRequests = state.pairingRequests.filterNot { it.requestId == requestId },
                                         status = state.status.copy(
-                                            trustedDeviceCount = state.status.trustedDeviceCount + 1,
+                                            trustedDeviceCount = updatedDevices.size,
                                             pendingPairingCount = (state.status.pendingPairingCount - 1).coerceAtLeast(0)
                                         ),
                                         history = if (request == null) state.history else listOf(
@@ -511,6 +779,9 @@ private fun ClipboardSyncAndroidApp() {
                                         .putString("webdav_base_url", updated.webDevBaseUrl)
                                         .putString("webdav_username", updated.webDevUsername)
                                         .putString("webdav_password", updated.webDevPassword)
+                                        .putBoolean("public_relay_enabled", updated.publicRelayEnabled)
+                                        .putString("public_relay_base_url", updated.publicRelayBaseUrl)
+                                        .putString("public_relay_bucket", updated.publicRelayBucket)
                                         .putBoolean("local_server_enabled", updated.localServerEnabled)
                                         .putString("pairing_policy", updated.pairingPolicy)
                                         .apply()
@@ -531,6 +802,24 @@ private fun ClipboardSyncAndroidApp() {
                                                     lastErrorMessage = if (ok) "None" else AppStrings.get(state.settings.language, "webdevFail")
                                                 ),
                                                 errorMessage = if (ok) null else AppStrings.get(state.settings.language, "webdevFail")
+                                            )
+                                        }
+                                    }
+                                },
+                                onTestPublicRelay = {
+                                    val cfg = PublicRelayConfig(
+                                        enabled = state.settings.publicRelayEnabled,
+                                        baseUrl = state.settings.publicRelayBaseUrl,
+                                        bucket = state.settings.publicRelayBucket
+                                    )
+                                    coroutineScope.launch(Dispatchers.IO) {
+                                        val ok = PublicRelayClient.test(cfg)
+                                        withContext(Dispatchers.Main) {
+                                            state = state.copy(
+                                                status = state.status.copy(
+                                                    lastErrorMessage = if (ok) "None" else AppStrings.get(state.settings.language, "publicRelayFail")
+                                                ),
+                                                errorMessage = if (ok) null else AppStrings.get(state.settings.language, "publicRelayFail")
                                             )
                                         }
                                     }
@@ -689,10 +978,79 @@ private fun PairingTab(
     language: String,
     query: String,
     onQueryChange: (String) -> Unit,
+    localDeviceId: String,
+    inviteCode: String,
+    onCopyLocalDeviceId: () -> Unit,
+    onCreateInvite: (String) -> Unit,
+    onCopyInvite: () -> Unit,
+    onJoinInvite: (String) -> Unit,
+    onPairByDeviceId: (String, String) -> Unit,
     onApprove: (String) -> Unit,
     onReject: (String) -> Unit
 ) {
+    var inviteName by remember { mutableStateOf(Build.MODEL ?: "Android") }
+    var inviteCodeInput by remember { mutableStateOf("") }
+    var remoteDeviceIdInput by remember { mutableStateOf("") }
+    var remoteDeviceNameInput by remember { mutableStateOf("") }
+
     LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        item {
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("${AppStrings.get(language, "deviceId")}: $localDeviceId", fontWeight = FontWeight.SemiBold)
+                    Button(onClick = onCopyLocalDeviceId) { Text(AppStrings.get(language, "copy")) }
+                }
+            }
+        }
+        item {
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(
+                        value = inviteName,
+                        onValueChange = { inviteName = it },
+                        label = { Text(AppStrings.get(language, "deviceName")) },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(onClick = { onCreateInvite(inviteName) }) { Text(AppStrings.get(language, "createInvite")) }
+                        Button(onClick = onCopyInvite, enabled = inviteCode.isNotBlank()) { Text(AppStrings.get(language, "copy")) }
+                    }
+                    if (inviteCode.isNotBlank()) {
+                        Text(inviteCode)
+                    }
+                    OutlinedTextField(
+                        value = inviteCodeInput,
+                        onValueChange = { inviteCodeInput = it },
+                        label = { Text(AppStrings.get(language, "invitePlaceholder")) },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Button(onClick = { onJoinInvite(inviteCodeInput) }) { Text(AppStrings.get(language, "joinByInvite")) }
+                }
+            }
+        }
+        item {
+            Card(modifier = Modifier.fillMaxWidth()) {
+                Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(
+                        value = remoteDeviceIdInput,
+                        onValueChange = { remoteDeviceIdInput = it },
+                        label = { Text(AppStrings.get(language, "remoteDeviceId")) },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = remoteDeviceNameInput,
+                        onValueChange = { remoteDeviceNameInput = it },
+                        label = { Text(AppStrings.get(language, "remoteDeviceName")) },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Button(onClick = {
+                        onPairByDeviceId(remoteDeviceIdInput, remoteDeviceNameInput)
+                        remoteDeviceIdInput = ""
+                        remoteDeviceNameInput = ""
+                    }) { Text(AppStrings.get(language, "pairByDeviceId")) }
+                }
+            }
+        }
         item {
             OutlinedTextField(
                 value = query,
@@ -715,6 +1073,7 @@ private fun PairingTab(
             Card(modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text(req.displayName, fontWeight = FontWeight.Bold)
+                    Text("ID: ${req.deviceId}")
                     Text("${AppStrings.get(language, "status")}: ${req.platform}")
                     Text("${AppStrings.get(language, "lastError")}: ${req.at}")
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -771,7 +1130,8 @@ private fun SettingsTab(
     settings: SettingsUi,
     language: String,
     onChange: (SettingsUi) -> Unit,
-    onTestWebDav: () -> Unit
+    onTestWebDav: () -> Unit,
+    onTestPublicRelay: () -> Unit
 ) {
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -780,6 +1140,14 @@ private fun SettingsTab(
                 Text(AppStrings.get(language, "darkMode"))
                 Spacer(modifier = Modifier.weight(1f))
                 Switch(checked = settings.darkMode, onCheckedChange = { onChange(settings.copy(darkMode = it)) })
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(AppStrings.get(language, "syncMode"))
+                Spacer(modifier = Modifier.weight(1f))
+                Switch(
+                    checked = settings.syncMode == "auto",
+                    onCheckedChange = { onChange(settings.copy(syncMode = if (it) "auto" else "manual")) }
+                )
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(AppStrings.get(language, "webdev"))
@@ -808,12 +1176,31 @@ private fun SettingsTab(
                 Text(AppStrings.get(language, "testWebdev"))
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(AppStrings.get(language, "publicRelay"))
+                Spacer(modifier = Modifier.weight(1f))
+                Checkbox(checked = settings.publicRelayEnabled, onCheckedChange = { onChange(settings.copy(publicRelayEnabled = it)) })
+            }
+            OutlinedTextField(
+                value = settings.publicRelayBaseUrl,
+                onValueChange = { onChange(settings.copy(publicRelayBaseUrl = it)) },
+                label = { Text(AppStrings.get(language, "publicRelayUrl")) },
+                modifier = Modifier.fillMaxWidth()
+            )
+            OutlinedTextField(
+                value = settings.publicRelayBucket,
+                onValueChange = { onChange(settings.copy(publicRelayBucket = it)) },
+                label = { Text(AppStrings.get(language, "publicRelayBucket")) },
+                modifier = Modifier.fillMaxWidth()
+            )
+            Button(onClick = onTestPublicRelay) {
+                Text(AppStrings.get(language, "testPublicRelay"))
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(AppStrings.get(language, "server"))
                 Spacer(modifier = Modifier.weight(1f))
                 Checkbox(checked = settings.localServerEnabled, onCheckedChange = { onChange(settings.copy(localServerEnabled = it)) })
             }
             StatusRow(AppStrings.get(language, "pairingPolicy"), settings.pairingPolicy)
-            StatusRow(AppStrings.get(language, "syncMode"), settings.syncMode)
             StatusRow(AppStrings.get(language, "space"), settings.spaceId)
         }
     }
@@ -894,7 +1281,14 @@ private fun decodeHistoryItems(raw: String?): List<HistoryUi> {
 private fun encodePairingRequests(list: List<PairingRequestUi>): String {
     val array = JSONArray()
     list.forEach {
-        array.put(JSONObject().put("requestId", it.requestId).put("displayName", it.displayName).put("platform", it.platform).put("at", it.at))
+        array.put(
+            JSONObject()
+                .put("requestId", it.requestId)
+                .put("deviceId", it.deviceId)
+                .put("displayName", it.displayName)
+                .put("platform", it.platform)
+                .put("at", it.at)
+        )
     }
     return array.toString()
 }
@@ -907,6 +1301,7 @@ private fun decodePairingRequests(raw: String?): List<PairingRequestUi> {
             val o = array.getJSONObject(index)
             PairingRequestUi(
                 requestId = o.optString("requestId"),
+                deviceId = o.optString("deviceId", o.optString("displayName")),
                 displayName = o.optString("displayName"),
                 platform = o.optString("platform"),
                 at = o.optString("at")
