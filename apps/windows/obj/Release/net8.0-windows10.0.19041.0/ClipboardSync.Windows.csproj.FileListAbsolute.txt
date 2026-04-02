@@ -15,3 +15,4 @@ C:\Users\14260\OneDrive\文档\document\copy\apps\windows\obj\Release\net8.0-win
 C:\Users\14260\OneDrive\文档\document\copy\apps\windows\obj\Release\net8.0-windows10.0.19041.0\ClipboardSync.Windows.pdb
 C:\Users\14260\OneDrive\文档\document\copy\apps\windows\obj\Release\net8.0-windows10.0.19041.0\ClipboardSync.Windows.genruntimeconfig.cache
 C:\Users\14260\OneDrive\文档\document\copy\apps\windows\obj\Release\net8.0-windows10.0.19041.0\ref\ClipboardSync.Windows.dll
+C:\Users\14260\OneDrive\文档\document\copy\apps\windows\obj\Release\net8.0-windows10.0.19041.0\ClipboardSync.Windows.sourcelink.json

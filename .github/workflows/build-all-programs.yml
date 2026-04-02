@@ -1,0 +1,119 @@
+name: Build All Programs
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build_node_packages:
+    name: Build Node Packages
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: packages/sync-simulator/package-lock.json
+
+      - name: Install Toolchain Dependencies
+        run: npm run bootstrap
+
+      - name: Build TypeScript Packages
+        run: npm run build
+
+  build_windows_dotnet:
+    name: Build Windows .NET Projects
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        project:
+          - apps/windows/ClipboardSync.Windows.csproj
+          - apps/windows-winui/ClipboardSync.Windows.WinUI.csproj
+          - scripts/validation/windows-scenario-runner/windows-scenario-runner.csproj
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Restore
+        shell: pwsh
+        run: dotnet restore ${{ matrix.project }}
+
+      - name: Build
+        shell: pwsh
+        run: dotnet build ${{ matrix.project }} -c Release --no-restore
+
+  build_android:
+    name: Build Android App
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.10.2"
+
+      - name: Build Android Release
+        working-directory: apps/android
+        run: gradle assembleRelease
+
+  build_apple_sources:
+    name: Build Apple Swift Sources
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Typecheck iOS Swift Sources
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -d apps/ios/Sources ]; then
+            ios_sources=$(find apps/ios/Sources -name "*.swift" -print)
+            if [ -n "$ios_sources" ]; then
+              xcrun --sdk iphonesimulator swiftc -typecheck $ios_sources
+            else
+              echo "No iOS Swift sources found."
+            fi
+          else
+            echo "iOS source directory not found."
+          fi
+
+      - name: Typecheck macOS Swift Sources
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -d apps/macos/Sources ]; then
+            mac_sources=$(find apps/macos/Sources -name "*.swift" -print)
+            if [ -n "$mac_sources" ]; then
+              xcrun --sdk macosx swiftc -typecheck $mac_sources
+            else
+              echo "No macOS Swift sources found."
+            fi
+          else
+            echo "macOS source directory not found."
+          fi
