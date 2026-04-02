@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "ClipboardSync.Windows.WinUI (Package)": {
+      "commandName": "MsixPackage"
+    },
+    "ClipboardSync.Windows.WinUI (Unpackaged)": {
+      "commandName": "Project"
+    }
+  }
+}

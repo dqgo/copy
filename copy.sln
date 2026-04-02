@@ -1,4 +1,4 @@
-Microsoft Visual Studio Solution File, Format Version 12.00
+﻿Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.5.2.0
 MinimumVisualStudioVersion = 10.0.40219.1
@@ -7,6 +7,8 @@ EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "windows", "windows", "{524A62EC-EBA4-0E97-529B-DA23001F75A0}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ClipboardSync.Windows", "apps\windows\ClipboardSync.Windows.csproj", "{F5CB2FAF-0DC6-BAD6-D3DA-12EC45233F5B}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ClipboardSync.Windows.WinUI", "apps\windows-winui\ClipboardSync.Windows.WinUI.csproj", "{5B1D9B34-71BD-4A96-8683-7B19CA9C9029}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -18,6 +20,10 @@ Global
 		{F5CB2FAF-0DC6-BAD6-D3DA-12EC45233F5B}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{F5CB2FAF-0DC6-BAD6-D3DA-12EC45233F5B}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{F5CB2FAF-0DC6-BAD6-D3DA-12EC45233F5B}.Release|Any CPU.Build.0 = Release|Any CPU
+		{5B1D9B34-71BD-4A96-8683-7B19CA9C9029}.Debug|Any CPU.ActiveCfg = Debug|x64
+		{5B1D9B34-71BD-4A96-8683-7B19CA9C9029}.Debug|Any CPU.Build.0 = Debug|x64
+		{5B1D9B34-71BD-4A96-8683-7B19CA9C9029}.Release|Any CPU.ActiveCfg = Release|x64
+		{5B1D9B34-71BD-4A96-8683-7B19CA9C9029}.Release|Any CPU.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -25,6 +31,7 @@ Global
 	GlobalSection(NestedProjects) = preSolution
 		{524A62EC-EBA4-0E97-529B-DA23001F75A0} = {1787FE1D-075E-9E68-7218-25F1BD1BBEAB}
 		{F5CB2FAF-0DC6-BAD6-D3DA-12EC45233F5B} = {524A62EC-EBA4-0E97-529B-DA23001F75A0}
+		{5B1D9B34-71BD-4A96-8683-7B19CA9C9029} = {1787FE1D-075E-9E68-7218-25F1BD1BBEAB}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {4246D228-4751-4D15-95D9-9486E5A38C41}

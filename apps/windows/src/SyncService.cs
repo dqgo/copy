@@ -23,6 +23,9 @@ public interface ISecureStore
 
 public sealed class SyncService
 {
+    private const string DefaultPublicRelayBaseUrl = "https://kvdb.io";
+    private const string PublicRelayClipboardKey = "clipboard-sync-text";
+
     private readonly IClipboardReader _reader;
     private readonly IClipboardWriter _writer;
     private readonly ISecureStore _store;
@@ -59,6 +62,16 @@ public sealed class SyncService
         _store.Delete("workspace_key");
     }
 
+    public void SaveDeviceId(string deviceId)
+    {
+        _store.Set("device_id", deviceId);
+    }
+
+    public string? LoadDeviceId()
+    {
+        return _store.Get("device_id");
+    }
+
     public void SaveWebDavSettings(string baseUrl, string username, string password, bool enabled)
     {
         _store.Set("webdav_enabled", enabled ? "1" : "0");
@@ -78,51 +91,171 @@ public sealed class SyncService
         );
     }
 
-    public async Task<bool> TestWebDavConnectionAsync(CancellationToken cancellationToken = default)
+    public void SavePublicRelaySettings(string baseUrl, string bucket, bool enabled)
     {
-        var cfg = LoadWebDavSettings();
-        if (!cfg.Enabled || string.IsNullOrWhiteSpace(cfg.BaseUrl))
+        _store.Set("public_relay_enabled", enabled ? "1" : "0");
+        _store.Set("public_relay_base_url", string.IsNullOrWhiteSpace(baseUrl) ? DefaultPublicRelayBaseUrl : baseUrl.Trim());
+        _store.Set("public_relay_bucket", bucket.Trim());
+    }
+
+    public (bool Enabled, string BaseUrl, string Bucket) LoadPublicRelaySettings()
+    {
+        var enabled = _store.Get("public_relay_enabled") == "1";
+        var baseUrl = _store.Get("public_relay_base_url");
+        return (
+            enabled,
+            string.IsNullOrWhiteSpace(baseUrl) ? DefaultPublicRelayBaseUrl : baseUrl,
+            _store.Get("public_relay_bucket") ?? string.Empty
+        );
+    }
+
+    public async Task<bool> TestPublicRelayConnectionAsync(CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var cfg = LoadPublicRelaySettings();
+            if (!cfg.Enabled || string.IsNullOrWhiteSpace(cfg.Bucket))
+            {
+                return false;
+            }
+
+            using var client = BuildPublicRelayClient(cfg.BaseUrl);
+            var probeKey = $"clipboard-sync-probe-{Environment.MachineName.ToLowerInvariant()}";
+            using var probeContent = new StringContent("ok", Encoding.UTF8, "text/plain");
+            using var putResponse = await client.PutAsync(BuildPublicRelayPath(cfg.Bucket, probeKey), probeContent, cancellationToken).ConfigureAwait(false);
+            if (!putResponse.IsSuccessStatusCode)
+            {
+                return false;
+            }
+
+            using var getResponse = await client.GetAsync(BuildPublicRelayPath(cfg.Bucket, probeKey), cancellationToken).ConfigureAwait(false);
+            if (!getResponse.IsSuccessStatusCode)
+            {
+                return false;
+            }
+
+            var payload = await getResponse.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+            return string.Equals(payload.Trim(), "ok", StringComparison.OrdinalIgnoreCase);
+        }
+        catch
         {
             return false;
         }
+    }
 
-        using var client = BuildWebDavClient(cfg.BaseUrl, cfg.Username, cfg.Password);
-        using var req = new HttpRequestMessage(HttpMethod.Head, cfg.BaseUrl.TrimEnd('/') + "/");
-        using var res = await client.SendAsync(req, cancellationToken).ConfigureAwait(false);
-        return res.IsSuccessStatusCode;
+    public async Task<bool> UploadClipboardToPublicRelayAsync(string text, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var cfg = LoadPublicRelaySettings();
+            if (!cfg.Enabled || string.IsNullOrWhiteSpace(cfg.Bucket))
+            {
+                return false;
+            }
+
+            using var client = BuildPublicRelayClient(cfg.BaseUrl);
+            using var content = new StringContent(text, Encoding.UTF8, "text/plain");
+            using var response = await client.PutAsync(BuildPublicRelayPath(cfg.Bucket, PublicRelayClipboardKey), content, cancellationToken).ConfigureAwait(false);
+            return response.IsSuccessStatusCode;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    public async Task<string?> DownloadClipboardFromPublicRelayAsync(CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var cfg = LoadPublicRelaySettings();
+            if (!cfg.Enabled || string.IsNullOrWhiteSpace(cfg.Bucket))
+            {
+                return null;
+            }
+
+            using var client = BuildPublicRelayClient(cfg.BaseUrl);
+            using var response = await client.GetAsync(BuildPublicRelayPath(cfg.Bucket, PublicRelayClipboardKey), cancellationToken).ConfigureAwait(false);
+            if (!response.IsSuccessStatusCode)
+            {
+                return null;
+            }
+
+            return await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    public async Task<bool> TestWebDavConnectionAsync(CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var cfg = LoadWebDavSettings();
+            if (!cfg.Enabled || string.IsNullOrWhiteSpace(cfg.BaseUrl))
+            {
+                return false;
+            }
+
+            using var client = BuildWebDavClient(cfg.BaseUrl, cfg.Username, cfg.Password);
+            using var req = new HttpRequestMessage(HttpMethod.Head, cfg.BaseUrl.TrimEnd('/') + "/");
+            using var res = await client.SendAsync(req, cancellationToken).ConfigureAwait(false);
+            return res.IsSuccessStatusCode;
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     public async Task<bool> UploadClipboardToWebDavAsync(string text, CancellationToken cancellationToken = default)
     {
-        var cfg = LoadWebDavSettings();
-        if (!cfg.Enabled || string.IsNullOrWhiteSpace(cfg.BaseUrl))
+        try
+        {
+            var cfg = LoadWebDavSettings();
+            if (!cfg.Enabled || string.IsNullOrWhiteSpace(cfg.BaseUrl))
+            {
+                return false;
+            }
+
+            using var client = BuildWebDavClient(cfg.BaseUrl, cfg.Username, cfg.Password);
+            var target = cfg.BaseUrl.TrimEnd('/') + "/clipboard-sync.txt";
+            using var content = new StringContent(text, Encoding.UTF8, "text/plain");
+            using var res = await client.PutAsync(target, content, cancellationToken).ConfigureAwait(false);
+            return res.IsSuccessStatusCode;
+        }
+        catch
         {
             return false;
         }
-
-        using var client = BuildWebDavClient(cfg.BaseUrl, cfg.Username, cfg.Password);
-        var target = cfg.BaseUrl.TrimEnd('/') + "/clipboard-sync.txt";
-        using var content = new StringContent(text, Encoding.UTF8, "text/plain");
-        using var res = await client.PutAsync(target, content, cancellationToken).ConfigureAwait(false);
-        return res.IsSuccessStatusCode;
     }
 
     public async Task<string?> DownloadClipboardFromWebDavAsync(CancellationToken cancellationToken = default)
     {
-        var cfg = LoadWebDavSettings();
-        if (!cfg.Enabled || string.IsNullOrWhiteSpace(cfg.BaseUrl))
+        try
         {
-            return null;
-        }
+            var cfg = LoadWebDavSettings();
+            if (!cfg.Enabled || string.IsNullOrWhiteSpace(cfg.BaseUrl))
+            {
+                return null;
+            }
 
-        using var client = BuildWebDavClient(cfg.BaseUrl, cfg.Username, cfg.Password);
-        var target = cfg.BaseUrl.TrimEnd('/') + "/clipboard-sync.txt";
-        using var res = await client.GetAsync(target, cancellationToken).ConfigureAwait(false);
-        if (!res.IsSuccessStatusCode)
+            using var client = BuildWebDavClient(cfg.BaseUrl, cfg.Username, cfg.Password);
+            var target = cfg.BaseUrl.TrimEnd('/') + "/clipboard-sync.txt";
+            using var res = await client.GetAsync(target, cancellationToken).ConfigureAwait(false);
+            if (!res.IsSuccessStatusCode)
+            {
+                return null;
+            }
+
+            return await res.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch
         {
             return null;
         }
-        return await res.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
     }
 
     private static HttpClient BuildWebDavClient(string baseUrl, string username, string password)
@@ -138,5 +271,24 @@ public sealed class SyncService
             client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Basic", raw);
         }
         return client;
+    }
+
+    private static HttpClient BuildPublicRelayClient(string baseUrl)
+    {
+        var normalizedBaseUrl = string.IsNullOrWhiteSpace(baseUrl) ? DefaultPublicRelayBaseUrl : baseUrl.Trim();
+        if (!normalizedBaseUrl.EndsWith('/'))
+        {
+            normalizedBaseUrl += "/";
+        }
+
+        return new HttpClient
+        {
+            BaseAddress = new Uri(normalizedBaseUrl)
+        };
+    }
+
+    private static string BuildPublicRelayPath(string bucket, string key)
+    {
+        return Uri.EscapeDataString(bucket.Trim()) + "/" + Uri.EscapeDataString(key.Trim());
     }
 }

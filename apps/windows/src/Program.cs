@@ -6,6 +6,7 @@ using System.Windows.Forms;
 using System.Collections.Generic;
 using System;
 using System.Linq;
+using System.Text;
 using System.Text.Json;
 using Microsoft.Win32;
 
@@ -58,13 +59,15 @@ internal sealed class DeviceItem
 internal sealed class PairingRequestItem
 {
     public string RequestId { get; }
+    public string DeviceId { get; }
     public string DeviceName { get; }
     public string Platform { get; }
     public string RequestedAt { get; }
 
-    public PairingRequestItem(string requestId, string deviceName, string platform, string requestedAt)
+    public PairingRequestItem(string requestId, string deviceId, string deviceName, string platform, string requestedAt)
     {
         RequestId = requestId;
+        DeviceId = deviceId;
         DeviceName = deviceName;
         Platform = platform;
         RequestedAt = requestedAt;
@@ -106,11 +109,23 @@ internal static class Program
             ["webdevUser"] = "WebDev 用户名",
             ["webdevPassword"] = "WebDev 密码",
             ["testWebdev"] = "测试 WebDev 连接",
+            ["publicRelay"] = "启用免费公共服务器",
+            ["publicRelayUrl"] = "公共服务器地址",
+            ["publicRelayBucket"] = "共享桶 ID",
+            ["testPublicRelay"] = "测试公共服务器",
             ["server"] = "启用本地服务模式",
             ["sendHtml"] = "发送 HTML",
             ["sendImage"] = "发送图片",
             ["sendFile"] = "发送文件",
             ["manualSyncBtn"] = "手动同步",
+            ["workspaceKey"] = "工作空间 ID",
+            ["deviceId"] = "设备唯一 ID",
+            ["deviceName"] = "设备名称",
+            ["copy"] = "复制",
+            ["createInvite"] = "生成邀请",
+            ["joinByInvite"] = "通过邀请码配对",
+            ["inviteCode"] = "邀请码",
+            ["invitePlaceholder"] = "粘贴对端邀请码",
             ["system"] = "跟随系统",
             ["light"] = "浅色",
             ["dark"] = "深色",
@@ -164,11 +179,23 @@ internal static class Program
             ["webdevUser"] = "WebDev Username",
             ["webdevPassword"] = "WebDev Password",
             ["testWebdev"] = "Test WebDev Connection",
+            ["publicRelay"] = "Enable Free Public Relay",
+            ["publicRelayUrl"] = "Public Relay URL",
+            ["publicRelayBucket"] = "Shared Bucket ID",
+            ["testPublicRelay"] = "Test Public Relay",
             ["server"] = "Enable Local Server Mode",
             ["sendHtml"] = "Send HTML",
             ["sendImage"] = "Send Image",
             ["sendFile"] = "Send File",
             ["manualSyncBtn"] = "Manual Sync",
+            ["workspaceKey"] = "Workspace ID",
+            ["deviceId"] = "Unique Device ID",
+            ["deviceName"] = "Device Name",
+            ["copy"] = "Copy",
+            ["createInvite"] = "Create Invite",
+            ["joinByInvite"] = "Pair By Invite",
+            ["inviteCode"] = "Invite Code",
+            ["invitePlaceholder"] = "Paste remote invite code",
             ["system"] = "System",
             ["light"] = "Light",
             ["dark"] = "Dark",
@@ -211,6 +238,13 @@ internal static class Program
             service.SaveWorkspaceKey(workspaceKey);
         }
 
+        var deviceId = service.LoadDeviceId();
+        if (string.IsNullOrWhiteSpace(deviceId))
+        {
+            deviceId = GenerateDeviceId();
+            service.SaveDeviceId(deviceId);
+        }
+
         var status = new StatusViewModel
         {
             ConnectionState = SyncConnectionState.Disconnected,
@@ -229,7 +263,8 @@ internal static class Program
         var savedHistory = LoadHistory(store);
         if (savedHistory.Count == 0)
         {
-            history.Items.Add("[info] workspace key loaded");
+            history.Items.Add($"[info] workspace key loaded · {workspaceKey}");
+            history.Items.Add($"[info] device id ready · {deviceId}");
         }
         else
         {
@@ -295,7 +330,7 @@ internal static class Program
         {
             Dock = DockStyle.Fill,
             ColumnCount = 2,
-            RowCount = 9,
+            RowCount = 11,
             Padding = new Padding(16)
         };
         statusGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 220));
@@ -309,6 +344,42 @@ internal static class Program
         var pendingValue = new Label { AutoSize = true, Text = status.PendingPairingCount.ToString() };
         var errValue = new Label { AutoSize = true, Text = "None" };
 
+        var workspacePanel = new FlowLayoutPanel { AutoSize = true, FlowDirection = FlowDirection.LeftToRight, WrapContents = false };
+        var workspaceValue = new TextBox { ReadOnly = true, Width = 360, Text = workspaceKey };
+        var copyWorkspace = new Button { Text = T(locale, "copy"), Width = 80, Height = 28 };
+        copyWorkspace.Click += (_, _) =>
+        {
+            try
+            {
+                Clipboard.SetText(workspaceValue.Text);
+                history.Items.Insert(0, "[event] workspace key copied");
+            }
+            catch
+            {
+                history.Items.Insert(0, "[warn] workspace key copy failed");
+            }
+        };
+        workspacePanel.Controls.Add(workspaceValue);
+        workspacePanel.Controls.Add(copyWorkspace);
+
+        var devicePanel = new FlowLayoutPanel { AutoSize = true, FlowDirection = FlowDirection.LeftToRight, WrapContents = false };
+        var deviceIdValue = new TextBox { ReadOnly = true, Width = 360, Text = deviceId };
+        var copyDeviceId = new Button { Text = T(locale, "copy"), Width = 80, Height = 28 };
+        copyDeviceId.Click += (_, _) =>
+        {
+            try
+            {
+                Clipboard.SetText(deviceIdValue.Text);
+                history.Items.Insert(0, "[event] device id copied");
+            }
+            catch
+            {
+                history.Items.Insert(0, "[warn] device id copy failed");
+            }
+        };
+        devicePanel.Controls.Add(deviceIdValue);
+        devicePanel.Controls.Add(copyDeviceId);
+
         statusGrid.Controls.Add(new Label { Text = T(locale, "connection"), AutoSize = true, Font = new Font("Segoe UI", 10, FontStyle.Bold) }, 0, 0);
         statusGrid.Controls.Add(connectionValue, 1, 0);
         statusGrid.Controls.Add(new Label { Text = T(locale, "sent"), AutoSize = true, Font = new Font("Segoe UI", 10, FontStyle.Bold) }, 0, 1);
@@ -321,8 +392,12 @@ internal static class Program
         statusGrid.Controls.Add(trustedValue, 1, 4);
         statusGrid.Controls.Add(new Label { Text = T(locale, "pendingPairing"), AutoSize = true, Font = new Font("Segoe UI", 10, FontStyle.Bold) }, 0, 5);
         statusGrid.Controls.Add(pendingValue, 1, 5);
-        statusGrid.Controls.Add(new Label { Text = T(locale, "lastError"), AutoSize = true, Font = new Font("Segoe UI", 10, FontStyle.Bold) }, 0, 6);
-        statusGrid.Controls.Add(errValue, 1, 6);
+        statusGrid.Controls.Add(new Label { Text = T(locale, "workspaceKey"), AutoSize = true, Font = new Font("Segoe UI", 10, FontStyle.Bold) }, 0, 6);
+        statusGrid.Controls.Add(workspacePanel, 1, 6);
+        statusGrid.Controls.Add(new Label { Text = T(locale, "deviceId"), AutoSize = true, Font = new Font("Segoe UI", 10, FontStyle.Bold) }, 0, 7);
+        statusGrid.Controls.Add(devicePanel, 1, 7);
+        statusGrid.Controls.Add(new Label { Text = T(locale, "lastError"), AutoSize = true, Font = new Font("Segoe UI", 10, FontStyle.Bold) }, 0, 8);
+        statusGrid.Controls.Add(errValue, 1, 8);
 
         var quickActions = new FlowLayoutPanel
         {
@@ -385,12 +460,43 @@ internal static class Program
         quickActions.Controls.Add(sendFileRef);
 
         var loadedWebDav = service.LoadWebDavSettings();
+        var loadedPublicRelay = service.LoadPublicRelaySettings();
+        if (string.IsNullOrWhiteSpace(loadedPublicRelay.Bucket))
+        {
+            loadedPublicRelay = (loadedPublicRelay.Enabled, loadedPublicRelay.BaseUrl, workspaceKey ?? string.Empty);
+        }
+
         var webdevCheck = new CheckBox { Text = T(locale, "webdev"), AutoSize = true, Checked = loadedWebDav.Enabled };
+        var publicRelayCheck = new CheckBox { Text = T(locale, "publicRelay"), AutoSize = true, Checked = loadedPublicRelay.Enabled };
         var serverCheck = new CheckBox { Text = T(locale, "server"), AutoSize = true, Checked = store.Get("local_server_enabled") == "1" };
         var webdavUrlText = new TextBox { Width = 320, Text = loadedWebDav.BaseUrl };
         var webdavUserText = new TextBox { Width = 220, Text = loadedWebDav.Username };
         var webdavPasswordText = new TextBox { Width = 220, Text = loadedWebDav.Password, UseSystemPasswordChar = true };
+        var publicRelayUrlText = new TextBox { Width = 320, Text = loadedPublicRelay.BaseUrl };
+        var publicRelayBucketText = new TextBox { Width = 320, Text = loadedPublicRelay.Bucket };
         var webdavTestBtn = new Button { Text = T(locale, "testWebdev"), Width = 220, Height = 30 };
+        var publicRelayTestBtn = new Button { Text = T(locale, "testPublicRelay"), Width = 220, Height = 30 };
+
+        webdevCheck.CheckedChanged += (_, _) =>
+        {
+            if (webdevCheck.Checked)
+            {
+                publicRelayCheck.Checked = false;
+            }
+
+            service.SaveWebDavSettings(webdavUrlText.Text, webdavUserText.Text, webdavPasswordText.Text, webdevCheck.Checked);
+        };
+
+        publicRelayCheck.CheckedChanged += (_, _) =>
+        {
+            if (publicRelayCheck.Checked)
+            {
+                webdevCheck.Checked = false;
+            }
+
+            service.SavePublicRelaySettings(publicRelayUrlText.Text, publicRelayBucketText.Text, publicRelayCheck.Checked);
+        };
+
         webdavTestBtn.Click += async (_, _) =>
         {
             service.SaveWebDavSettings(webdavUrlText.Text, webdavUserText.Text, webdavPasswordText.Text, webdevCheck.Checked);
@@ -409,47 +515,158 @@ internal static class Program
             }
             PersistRuntimeSnapshots();
         };
-        var manualSync = new Button { Text = T(locale, "manualSync"), Width = 180, Height = 34 };
-        manualSync.Click += async (_, _) =>
-        {
-            var text = service.CaptureClipboard() ?? "empty";
-            if (webdevCheck.Checked)
-            {
-                service.SaveWebDavSettings(webdavUrlText.Text, webdavUserText.Text, webdavPasswordText.Text, true);
-                var uploaded = await service.UploadClipboardToWebDavAsync(text);
-                if (!uploaded)
-                {
-                    status.LastErrorMessage = "WebDev upload failed";
-                    errValue.Text = status.LastErrorMessage;
-                    history.Items.Insert(0, "[error] webdev · upload failed");
-                    PersistRuntimeSnapshots();
-                    return;
-                }
 
-                var remote = await service.DownloadClipboardFromWebDavAsync();
-                if (!string.IsNullOrWhiteSpace(remote))
-                {
-                    service.ApplyRemoteText(remote);
-                    history.Items.Insert(0, $"[in] text/plain · {remote}");
-                }
+        publicRelayTestBtn.Click += async (_, _) =>
+        {
+            service.SavePublicRelaySettings(publicRelayUrlText.Text, publicRelayBucketText.Text, publicRelayCheck.Checked);
+            var ok = await service.TestPublicRelayConnectionAsync();
+            if (ok)
+            {
+                status.LastErrorMessage = string.Empty;
+                errValue.Text = "None";
+                history.Items.Insert(0, "[event] public relay · connection ok");
             }
             else
             {
-                service.ApplyRemoteText($"manual-sync:{text}");
-                history.Items.Insert(0, $"[out] text/plain · {text}");
+                status.LastErrorMessage = "Public relay connection failed";
+                errValue.Text = status.LastErrorMessage;
+                history.Items.Insert(0, "[error] public relay · connection failed");
             }
-
-            status.SyncedOutCount += 1;
-            status.SyncedInCount += 1;
-            sentValue.Text = status.SyncedOutCount.ToString();
-            recvValue.Text = status.SyncedInCount.ToString();
-            errValue.Text = "None";
             PersistRuntimeSnapshots();
         };
-        statusGrid.Controls.Add(quickActions, 0, 5);
-        statusGrid.Controls.Add(quickActions, 0, 7);
+
+        string ActiveSyncChannelName()
+        {
+            if (publicRelayCheck.Checked)
+            {
+                return "public";
+            }
+
+            if (webdevCheck.Checked)
+            {
+                return "webdav";
+            }
+
+            return "local";
+        }
+
+        async Task<bool> UploadClipboardToActiveChannelAsync(string text)
+        {
+            if (publicRelayCheck.Checked)
+            {
+                service.SavePublicRelaySettings(publicRelayUrlText.Text, publicRelayBucketText.Text, true);
+                return await service.UploadClipboardToPublicRelayAsync(text);
+            }
+
+            if (webdevCheck.Checked)
+            {
+                service.SaveWebDavSettings(webdavUrlText.Text, webdavUserText.Text, webdavPasswordText.Text, true);
+                return await service.UploadClipboardToWebDavAsync(text);
+            }
+
+            return true;
+        }
+
+        async Task<string?> DownloadClipboardFromActiveChannelAsync()
+        {
+            if (publicRelayCheck.Checked)
+            {
+                service.SavePublicRelaySettings(publicRelayUrlText.Text, publicRelayBucketText.Text, true);
+                return await service.DownloadClipboardFromPublicRelayAsync();
+            }
+
+            if (webdevCheck.Checked)
+            {
+                service.SaveWebDavSettings(webdavUrlText.Text, webdavUserText.Text, webdavPasswordText.Text, true);
+                return await service.DownloadClipboardFromWebDavAsync();
+            }
+
+            return null;
+        }
+
+        var autoSyncTimer = new System.Windows.Forms.Timer { Interval = 2500 };
+        var syncInProgress = false;
+        var lastUploadedText = string.Empty;
+        var lastAppliedRemoteText = string.Empty;
+
+        async Task RunSharedClipboardSyncAsync(bool manualTriggered)
+        {
+            if (syncInProgress)
+            {
+                return;
+            }
+
+            syncInProgress = true;
+            try
+            {
+                var localText = service.CaptureClipboard() ?? string.Empty;
+                if (!string.IsNullOrWhiteSpace(localText) && !string.Equals(localText, lastUploadedText, StringComparison.Ordinal))
+                {
+                    var uploaded = await UploadClipboardToActiveChannelAsync(localText);
+                    if (!uploaded)
+                    {
+                        status.LastErrorMessage = ActiveSyncChannelName() + " upload failed";
+                        errValue.Text = status.LastErrorMessage;
+                        history.Items.Insert(0, "[error] " + ActiveSyncChannelName() + " · upload failed");
+                        connectionValue.Text = SyncConnectionState.Degraded.ToString();
+                        PersistRuntimeSnapshots();
+                        return;
+                    }
+
+                    status.SyncedOutCount += 1;
+                    sentValue.Text = status.SyncedOutCount.ToString();
+                    lastUploadedText = localText;
+                    history.Items.Insert(0, "[out] " + ActiveSyncChannelName() + " · " + localText);
+                }
+
+                var remoteText = await DownloadClipboardFromActiveChannelAsync();
+                if (!string.IsNullOrWhiteSpace(remoteText)
+                    && !string.Equals(remoteText, lastAppliedRemoteText, StringComparison.Ordinal)
+                    && !string.Equals(remoteText, localText, StringComparison.Ordinal))
+                {
+                    service.ApplyRemoteText(remoteText);
+                    lastAppliedRemoteText = remoteText;
+                    status.SyncedInCount += 1;
+                    recvValue.Text = status.SyncedInCount.ToString();
+                    history.Items.Insert(0, "[in] " + ActiveSyncChannelName() + " · " + remoteText);
+                }
+
+                if (manualTriggered && ActiveSyncChannelName() == "local")
+                {
+                    service.ApplyRemoteText("manual-sync:" + localText);
+                    status.SyncedInCount += 1;
+                    recvValue.Text = status.SyncedInCount.ToString();
+                    history.Items.Insert(0, "[in] local · manual-sync:" + localText);
+                }
+
+                status.ConnectionState = SyncConnectionState.Connected;
+                connectionValue.Text = status.ConnectionState.ToString();
+                status.LastErrorMessage = string.Empty;
+                errValue.Text = "None";
+                PersistRuntimeSnapshots();
+            }
+            catch (Exception ex)
+            {
+                status.ConnectionState = SyncConnectionState.Degraded;
+                connectionValue.Text = status.ConnectionState.ToString();
+                status.LastErrorMessage = ex.Message;
+                errValue.Text = status.LastErrorMessage;
+                history.Items.Insert(0, "[error] sync · " + ex.GetType().Name);
+                PersistRuntimeSnapshots();
+            }
+            finally
+            {
+                syncInProgress = false;
+            }
+        }
+
+        autoSyncTimer.Tick += async (_, _) => await RunSharedClipboardSyncAsync(false);
+
+        var manualSync = new Button { Text = T(locale, "manualSync"), Width = 180, Height = 34 };
+        manualSync.Click += async (_, _) => await RunSharedClipboardSyncAsync(true);
+        statusGrid.Controls.Add(quickActions, 0, 9);
         statusGrid.SetColumnSpan(quickActions, 2);
-        statusGrid.Controls.Add(manualSync, 0, 8);
+        statusGrid.Controls.Add(manualSync, 0, 10);
         statusGrid.SetColumnSpan(manualSync, 2);
         statusTab.Controls.Add(statusGrid);
 
@@ -502,6 +719,8 @@ internal static class Program
                 {
                     trustedDevices.RemoveAll(d => d.DeviceId == selected.DeviceId);
                     RefreshDeviceList();
+                    status.TrustedDeviceCount = trustedDevices.Count;
+                    trustedValue.Text = status.TrustedDeviceCount.ToString();
                     status.RejectedEventCount += 1;
                     rejValue.Text = status.RejectedEventCount.ToString();
                     status.LastErrorMessage = $"Revoked device: {selected.DeviceId}";
@@ -519,10 +738,87 @@ internal static class Program
         devicesTab.Controls.Add(deviceGrid);
 
         var pairingGrid = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 2, ColumnCount = 1, Padding = new Padding(16) };
-        pairingGrid.RowCount = 3;
+        pairingGrid.RowCount = 4;
+        pairingGrid.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         pairingGrid.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         pairingGrid.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         pairingGrid.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+
+        void AddOrUpdateTrustedDevice(string remoteDeviceId, string remoteName)
+        {
+            var existing = trustedDevices.FirstOrDefault(x => string.Equals(x.DeviceId, remoteDeviceId, StringComparison.Ordinal));
+            var seen = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
+            if (existing is null)
+            {
+                trustedDevices.Insert(0, new DeviceItem(remoteDeviceId, remoteName, seen));
+            }
+            else
+            {
+                existing.LastSeen = seen;
+            }
+
+            status.TrustedDeviceCount = trustedDevices.Count;
+            trustedValue.Text = status.TrustedDeviceCount.ToString();
+            RefreshDeviceList();
+        }
+
+        var invitePanel = new FlowLayoutPanel
+        {
+            AutoSize = true,
+            WrapContents = true,
+            FlowDirection = FlowDirection.LeftToRight,
+            Dock = DockStyle.Top
+        };
+        var inviteNameText = new TextBox { Width = 150, Text = Environment.MachineName };
+        var createInviteButton = new Button { Text = T(locale, "createInvite"), Width = 120, Height = 30 };
+        var inviteCodeOutput = new TextBox { Width = 350, ReadOnly = true };
+        var copyInviteButton = new Button { Text = T(locale, "copy"), Width = 70, Height = 30 };
+        var inviteCodeInput = new TextBox { Width = 350, PlaceholderText = T(locale, "invitePlaceholder") };
+        var joinInviteButton = new Button { Text = T(locale, "joinByInvite"), Width = 130, Height = 30 };
+
+        createInviteButton.Click += (_, _) =>
+        {
+            var deviceName = string.IsNullOrWhiteSpace(inviteNameText.Text) ? Environment.MachineName : inviteNameText.Text.Trim();
+            var inviteCode = CreateInviteCode(workspaceKey ?? string.Empty, deviceId ?? string.Empty, deviceName, "windows");
+            inviteCodeOutput.Text = inviteCode;
+            try
+            {
+                Clipboard.SetText(inviteCode);
+                history.Items.Insert(0, "[event] pairing invite created and copied");
+            }
+            catch
+            {
+                history.Items.Insert(0, "[event] pairing invite created");
+            }
+            PersistRuntimeSnapshots();
+        };
+
+        copyInviteButton.Click += (_, _) =>
+        {
+            if (string.IsNullOrWhiteSpace(inviteCodeOutput.Text))
+            {
+                return;
+            }
+
+            try
+            {
+                Clipboard.SetText(inviteCodeOutput.Text);
+                history.Items.Insert(0, "[event] invite copied");
+            }
+            catch
+            {
+                history.Items.Insert(0, "[warn] invite copy failed");
+            }
+        };
+
+        invitePanel.Controls.Add(new Label { Text = T(locale, "deviceName"), AutoSize = true, Padding = new Padding(0, 7, 0, 0) });
+        invitePanel.Controls.Add(inviteNameText);
+        invitePanel.Controls.Add(createInviteButton);
+        invitePanel.Controls.Add(inviteCodeOutput);
+        invitePanel.Controls.Add(copyInviteButton);
+        invitePanel.Controls.Add(inviteCodeInput);
+        invitePanel.Controls.Add(joinInviteButton);
+
         var pairingSearch = new TextBox { Dock = DockStyle.Top, PlaceholderText = "Search requests..." };
         pairingSearch.AccessibleName = "Pairing Search";
         pairingSearch.AccessibleDescription = "Filter pairing requests by device name or platform";
@@ -549,6 +845,67 @@ internal static class Program
         pairingSearch.TextChanged += (_, _) => RefreshPairingList();
         RefreshPairingList();
 
+        joinInviteButton.Click += (_, _) =>
+        {
+            if (!TryParseInviteCode(inviteCodeInput.Text, out var invitePayload, out var parseError))
+            {
+                status.LastErrorMessage = parseError;
+                errValue.Text = status.LastErrorMessage;
+                history.Items.Insert(0, "[error] invite parse failed");
+                return;
+            }
+
+            if (string.Equals(invitePayload.DeviceId, deviceId, StringComparison.Ordinal))
+            {
+                status.LastErrorMessage = "Cannot pair with current device";
+                errValue.Text = status.LastErrorMessage;
+                return;
+            }
+
+            if (!string.Equals(invitePayload.WorkspaceKey, workspaceKey, StringComparison.Ordinal))
+            {
+                workspaceKey = invitePayload.WorkspaceKey;
+                service.SaveWorkspaceKey(workspaceKey);
+                workspaceValue.Text = workspaceKey;
+                if (string.IsNullOrWhiteSpace(publicRelayBucketText.Text))
+                {
+                    publicRelayBucketText.Text = workspaceKey;
+                }
+            }
+
+            var autoApproveInvite = string.Equals(store.Get("pairing_policy"), "auto-approve-invite", StringComparison.OrdinalIgnoreCase);
+            if (autoApproveInvite)
+            {
+                AddOrUpdateTrustedDevice(invitePayload.DeviceId, invitePayload.DeviceName);
+                history.Items.Insert(0, "[event] pairing · auto-approved " + invitePayload.DeviceName);
+            }
+            else
+            {
+                if (pairingRequests.Any(x => string.Equals(x.DeviceId, invitePayload.DeviceId, StringComparison.Ordinal)))
+                {
+                    status.LastErrorMessage = "Pairing request already exists";
+                    errValue.Text = status.LastErrorMessage;
+                    return;
+                }
+
+                pairingRequests.Insert(0, new PairingRequestItem(
+                    "req-" + Guid.NewGuid().ToString("N"),
+                    invitePayload.DeviceId,
+                    invitePayload.DeviceName,
+                    invitePayload.Platform,
+                    DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss")
+                ));
+                RefreshPairingList();
+                status.PendingPairingCount = pairingRequests.Count;
+                pendingValue.Text = status.PendingPairingCount.ToString();
+                history.Items.Insert(0, "[event] pairing request added · " + invitePayload.DeviceName);
+            }
+
+            status.LastErrorMessage = string.Empty;
+            errValue.Text = "None";
+            PersistRuntimeSnapshots();
+        };
+
         var pairingActions = new FlowLayoutPanel { AutoSize = true, FlowDirection = FlowDirection.LeftToRight, Dock = DockStyle.Top };
         var approve = new Button { Text = T(locale, "approve"), Width = 130, Height = 34 };
         var reject = new Button { Text = T(locale, "reject"), Width = 130, Height = 34 };
@@ -560,11 +917,10 @@ internal static class Program
             if (pairingList.SelectedItem is PairingRequestItem selected)
             {
                 pairingRequests.RemoveAll(r => r.RequestId == selected.RequestId);
+                AddOrUpdateTrustedDevice(selected.DeviceId, selected.DeviceName);
                 RefreshPairingList();
-                status.PendingPairingCount = Math.Max(0, status.PendingPairingCount - 1);
-                status.TrustedDeviceCount += 1;
+                status.PendingPairingCount = pairingRequests.Count;
                 pendingValue.Text = status.PendingPairingCount.ToString();
-                trustedValue.Text = status.TrustedDeviceCount.ToString();
                 history.Items.Insert(0, $"[event] pairing · approved {selected.DeviceName}");
                 PersistRuntimeSnapshots();
             }
@@ -586,7 +942,7 @@ internal static class Program
                 {
                     pairingRequests.RemoveAll(r => r.RequestId == selected.RequestId);
                     RefreshPairingList();
-                    status.PendingPairingCount = Math.Max(0, status.PendingPairingCount - 1);
+                    status.PendingPairingCount = pairingRequests.Count;
                     pendingValue.Text = status.PendingPairingCount.ToString();
                     history.Items.Insert(0, $"[event] pairing · rejected {selected.DeviceName}");
                     PersistRuntimeSnapshots();
@@ -596,11 +952,12 @@ internal static class Program
 
         pairingActions.Controls.Add(approve);
         pairingActions.Controls.Add(reject);
-        pairingGrid.Controls.Add(pairingSearch, 0, 0);
-        pairingGrid.Controls.Add(pairingList, 0, 1);
-        pairingGrid.Controls.Add(pairingActions, 0, 2);
-        pairingGrid.Controls.Add(pairingEmptyHint, 0, 2);
-        pairingGrid.Controls.Add(pairingClearFilter, 0, 2);
+        pairingGrid.Controls.Add(invitePanel, 0, 0);
+        pairingGrid.Controls.Add(pairingSearch, 0, 1);
+        pairingGrid.Controls.Add(pairingList, 0, 2);
+        pairingGrid.Controls.Add(pairingActions, 0, 3);
+        pairingGrid.Controls.Add(pairingEmptyHint, 0, 3);
+        pairingGrid.Controls.Add(pairingClearFilter, 0, 3);
         pairingTab.Controls.Add(pairingGrid);
 
         historyTab.Controls.Add(history);
@@ -609,7 +966,7 @@ internal static class Program
         {
             Dock = DockStyle.Fill,
             ColumnCount = 2,
-            RowCount = 11,
+            RowCount = 15,
             Padding = new Padding(16)
         };
         settingsGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 220));
@@ -638,6 +995,7 @@ internal static class Program
         pairingPolicyCombo.SelectedItem = store.Get("pairing_policy") ?? "manual-approve";
 
         webdevCheck.Text = T(locale, "webdev");
+        publicRelayCheck.Text = T(locale, "publicRelay");
         serverCheck.Text = T(locale, "server");
 
         langCombo.SelectedIndexChanged += (_, _) =>
@@ -646,6 +1004,14 @@ internal static class Program
             {
                 locale = lang;
                 ApplyLocale(form, tabs, statusTab, devicesTab, historyTab, pairingTab, settingsTab, manualSync, revoke, approve, reject, webdevCheck, serverCheck, webdavTestBtn, locale);
+                publicRelayCheck.Text = T(locale, "publicRelay");
+                publicRelayTestBtn.Text = T(locale, "testPublicRelay");
+                copyWorkspace.Text = T(locale, "copy");
+                copyDeviceId.Text = T(locale, "copy");
+                createInviteButton.Text = T(locale, "createInvite");
+                joinInviteButton.Text = T(locale, "joinByInvite");
+                copyInviteButton.Text = T(locale, "copy");
+                inviteCodeInput.PlaceholderText = T(locale, "invitePlaceholder");
             }
         };
 
@@ -666,6 +1032,16 @@ internal static class Program
             if (modeCombo.SelectedItem is string value)
             {
                 store.Set("sync_mode", value);
+                if (string.Equals(value, "auto", StringComparison.OrdinalIgnoreCase))
+                {
+                    autoSyncTimer.Start();
+                    history.Items.Insert(0, "[event] auto shared clipboard enabled");
+                }
+                else
+                {
+                    autoSyncTimer.Stop();
+                    history.Items.Insert(0, "[event] auto shared clipboard disabled");
+                }
             }
         };
 
@@ -693,6 +1069,11 @@ internal static class Program
         // Apply system-detected theme on startup
         ApplyTheme(form, systemDarkMode);
 
+        if (string.Equals(modeCombo.SelectedItem as string, "auto", StringComparison.OrdinalIgnoreCase))
+        {
+            autoSyncTimer.Start();
+        }
+
         settingsGrid.Controls.Add(new Label { Text = T(locale, "language"), AutoSize = true, Font = new Font("Segoe UI", 10, FontStyle.Bold) }, 0, 0);
         settingsGrid.Controls.Add(langCombo, 1, 0);
         settingsGrid.Controls.Add(new Label { Text = T(locale, "theme"), AutoSize = true, Font = new Font("Segoe UI", 10, FontStyle.Bold) }, 0, 1);
@@ -710,8 +1091,14 @@ internal static class Program
         settingsGrid.Controls.Add(webdavUserText, 1, 7);
         settingsGrid.Controls.Add(new Label { Text = T(locale, "webdevPassword"), AutoSize = true, Font = new Font("Segoe UI", 10, FontStyle.Bold) }, 0, 8);
         settingsGrid.Controls.Add(webdavPasswordText, 1, 8);
-        settingsGrid.Controls.Add(serverCheck, 1, 9);
-        settingsGrid.Controls.Add(webdavTestBtn, 1, 10);
+        settingsGrid.Controls.Add(publicRelayCheck, 1, 9);
+        settingsGrid.Controls.Add(new Label { Text = T(locale, "publicRelayUrl"), AutoSize = true, Font = new Font("Segoe UI", 10, FontStyle.Bold) }, 0, 10);
+        settingsGrid.Controls.Add(publicRelayUrlText, 1, 10);
+        settingsGrid.Controls.Add(new Label { Text = T(locale, "publicRelayBucket"), AutoSize = true, Font = new Font("Segoe UI", 10, FontStyle.Bold) }, 0, 11);
+        settingsGrid.Controls.Add(publicRelayBucketText, 1, 11);
+        settingsGrid.Controls.Add(serverCheck, 1, 12);
+        settingsGrid.Controls.Add(webdavTestBtn, 1, 13);
+        settingsGrid.Controls.Add(publicRelayTestBtn, 1, 14);
         settingsTab.Controls.Add(settingsGrid);
 
         root.Controls.Add(header, 0, 0);
@@ -754,6 +1141,13 @@ internal static class Program
                 form.Hide();
                 notifyIcon.ShowBalloonTip(1200, "Clipboard Sync", "应用仍在托盘中运行", ToolTipIcon.Info);
                 ApplyLocale(form, tabs, statusTab, devicesTab, historyTab, pairingTab, settingsTab, manualSync, revoke, approve, reject, webdevCheck, serverCheck, webdavTestBtn, locale);
+                publicRelayCheck.Text = T(locale, "publicRelay");
+                publicRelayTestBtn.Text = T(locale, "testPublicRelay");
+                createInviteButton.Text = T(locale, "createInvite");
+                joinInviteButton.Text = T(locale, "joinByInvite");
+                copyInviteButton.Text = T(locale, "copy");
+                copyWorkspace.Text = T(locale, "copy");
+                copyDeviceId.Text = T(locale, "copy");
             }
         };
 
@@ -766,6 +1160,8 @@ internal static class Program
             }
             else
             {
+                autoSyncTimer.Stop();
+                autoSyncTimer.Dispose();
                 SaveRuntimeSnapshots(store, trustedDevices, pairingRequests, history);
                 notifyIcon.Visible = false;
                 notifyIcon.Dispose();
@@ -798,7 +1194,13 @@ internal static class Program
         try
         {
             var payload = JsonSerializer.Deserialize<List<PairingSnapshot>>(raw) ?? new List<PairingSnapshot>();
-            return payload.Select(x => new PairingRequestItem(x.RequestId ?? string.Empty, x.DeviceName ?? string.Empty, x.Platform ?? string.Empty, x.RequestedAt ?? string.Empty)).ToList();
+            return payload.Select(x => new PairingRequestItem(
+                x.RequestId ?? string.Empty,
+                x.DeviceId ?? string.Empty,
+                x.DeviceName ?? string.Empty,
+                x.Platform ?? string.Empty,
+                x.RequestedAt ?? string.Empty
+            )).ToList();
         }
         catch
         {
@@ -823,7 +1225,7 @@ internal static class Program
     private static void SaveRuntimeSnapshots(ISecureStore store, List<DeviceItem> devices, List<PairingRequestItem> pairingRequests, ListBox history)
     {
         var devicesPayload = devices.Select(x => new DeviceSnapshot { DeviceId = x.DeviceId, Name = x.Name, LastSeen = x.LastSeen }).ToList();
-        var pairingPayload = pairingRequests.Select(x => new PairingSnapshot { RequestId = x.RequestId, DeviceName = x.DeviceName, Platform = x.Platform, RequestedAt = x.RequestedAt }).ToList();
+        var pairingPayload = pairingRequests.Select(x => new PairingSnapshot { RequestId = x.RequestId, DeviceId = x.DeviceId, DeviceName = x.DeviceName, Platform = x.Platform, RequestedAt = x.RequestedAt }).ToList();
         var historyPayload = history.Items.Cast<object>().Select(x => x?.ToString() ?? string.Empty).Take(300).ToList();
 
         store.Set("trusted_devices_json", JsonSerializer.Serialize(devicesPayload));
@@ -841,9 +1243,86 @@ internal static class Program
     private sealed class PairingSnapshot
     {
         public string? RequestId { get; set; }
+        public string? DeviceId { get; set; }
         public string? DeviceName { get; set; }
         public string? Platform { get; set; }
         public string? RequestedAt { get; set; }
+    }
+
+    private sealed class InvitePayload
+    {
+        public string WorkspaceKey { get; set; } = string.Empty;
+        public string DeviceId { get; set; } = string.Empty;
+        public string DeviceName { get; set; } = string.Empty;
+        public string Platform { get; set; } = "windows";
+    }
+
+    private static string GenerateDeviceId()
+    {
+        return "win-" + Guid.NewGuid().ToString("N").Substring(0, 12);
+    }
+
+    private static string CreateInviteCode(string workspaceKey, string deviceId, string deviceName, string platform)
+    {
+        var payload = new InvitePayload
+        {
+            WorkspaceKey = workspaceKey,
+            DeviceId = deviceId,
+            DeviceName = deviceName,
+            Platform = platform
+        };
+
+        var json = JsonSerializer.Serialize(payload);
+        var raw = Encoding.UTF8.GetBytes(json);
+        return Convert.ToBase64String(raw)
+            .TrimEnd('=')
+            .Replace('+', '-')
+            .Replace('/', '_');
+    }
+
+    private static bool TryParseInviteCode(string inviteCode, out InvitePayload payload, out string error)
+    {
+        payload = new InvitePayload();
+        error = string.Empty;
+        if (string.IsNullOrWhiteSpace(inviteCode))
+        {
+            error = "Invite code is empty";
+            return false;
+        }
+
+        try
+        {
+            var normalized = inviteCode.Trim().Replace('-', '+').Replace('_', '/');
+            switch (normalized.Length % 4)
+            {
+                case 2:
+                    normalized += "==";
+                    break;
+                case 3:
+                    normalized += "=";
+                    break;
+            }
+
+            var raw = Convert.FromBase64String(normalized);
+            var json = Encoding.UTF8.GetString(raw);
+            var parsed = JsonSerializer.Deserialize<InvitePayload>(json);
+            if (parsed is null
+                || string.IsNullOrWhiteSpace(parsed.WorkspaceKey)
+                || string.IsNullOrWhiteSpace(parsed.DeviceId)
+                || string.IsNullOrWhiteSpace(parsed.DeviceName))
+            {
+                error = "Invalid invite payload";
+                return false;
+            }
+
+            payload = parsed;
+            return true;
+        }
+        catch
+        {
+            error = "Invite code format error";
+            return false;
+        }
     }
 
     private static string T(string locale, string key)
@@ -890,18 +1369,50 @@ internal static class Program
 
     private static void ApplyTheme(Control root, bool dark)
     {
-        var bg = dark ? Color.FromArgb(26, 26, 32) : Color.White;
-        var fg = dark ? Color.FromArgb(230, 230, 240) : Color.Black;
-        ApplyThemeRecursive(root, bg, fg);
+        var background = dark ? Color.FromArgb(17, 24, 39) : Color.FromArgb(240, 245, 252);
+        var surface = dark ? Color.FromArgb(30, 41, 59) : Color.White;
+        var foreground = dark ? Color.FromArgb(241, 245, 249) : Color.FromArgb(26, 35, 50);
+        var accent = dark ? Color.FromArgb(56, 189, 248) : Color.FromArgb(13, 110, 253);
+        ApplyThemeRecursive(root, background, surface, foreground, accent, dark);
     }
 
-    private static void ApplyThemeRecursive(Control c, Color bg, Color fg)
+    private static void ApplyThemeRecursive(Control c, Color background, Color surface, Color foreground, Color accent, bool dark)
     {
-        c.BackColor = bg;
-        c.ForeColor = fg;
+        c.ForeColor = foreground;
+
+        switch (c)
+        {
+            case Form:
+                c.BackColor = background;
+                break;
+            case TabControl:
+            case TabPage:
+            case ListBox:
+            case TableLayoutPanel:
+            case FlowLayoutPanel:
+                c.BackColor = surface;
+                break;
+            case Button button:
+                button.FlatStyle = FlatStyle.Flat;
+                button.FlatAppearance.BorderSize = 0;
+                button.BackColor = accent;
+                button.ForeColor = Color.White;
+                break;
+            case TextBox:
+            case ComboBox:
+                c.BackColor = dark ? Color.FromArgb(15, 23, 42) : Color.White;
+                break;
+            case Label:
+                c.BackColor = Color.Transparent;
+                break;
+            default:
+                c.BackColor = background;
+                break;
+        }
+
         foreach (Control child in c.Controls)
         {
-            ApplyThemeRecursive(child, bg, fg);
+            ApplyThemeRecursive(child, background, surface, foreground, accent, dark);
         }
     }
 

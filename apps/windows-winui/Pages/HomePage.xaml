@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<Page
+    x:Class="ClipboardSync_Windows_WinUI.Pages.HomePage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d">
+
+    <ScrollViewer>
+        <StackPanel Padding="24" Spacing="16">
+            <TextBlock FontSize="30" FontWeight="SemiBold" Text="Clipboard Sync · WinUI 3" />
+            <TextBlock Opacity="0.75" Text="主动配对、免费公共服务器、唯一 ID、共享粘贴板" />
+
+            <StackPanel Orientation="Horizontal" Spacing="10">
+                <TextBlock Width="130" VerticalAlignment="Center" Text="工作空间 ID" />
+                <TextBox x:Name="WorkspaceKeyText" Width="460" IsReadOnly="True" />
+                <Button Content="复制" Click="CopyWorkspaceButton_Click" />
+            </StackPanel>
+
+            <StackPanel Orientation="Horizontal" Spacing="10">
+                <TextBlock Width="130" VerticalAlignment="Center" Text="设备唯一 ID" />
+                <TextBox x:Name="DeviceIdText" Width="460" IsReadOnly="True" />
+                <Button Content="复制" Click="CopyDeviceIdButton_Click" />
+            </StackPanel>
+
+            <StackPanel Orientation="Horizontal" Spacing="10">
+                <TextBox x:Name="InviteNameText" Width="220" Header="设备名称" />
+                <Button Content="生成邀请码" Click="CreateInviteButton_Click" />
+                <Button Content="复制邀请码" Click="CopyInviteButton_Click" />
+            </StackPanel>
+
+            <TextBox x:Name="InviteCodeText" Header="邀请码" IsReadOnly="True" TextWrapping="Wrap" />
+
+            <StackPanel Orientation="Horizontal" Spacing="10">
+                <TextBox x:Name="JoinInviteText" Width="540" Header="导入邀请码" TextWrapping="Wrap" />
+                <Button Content="发起配对" Click="JoinInviteButton_Click" />
+            </StackPanel>
+
+            <StackPanel Orientation="Horizontal" Spacing="12">
+                <ToggleSwitch x:Name="AutoSyncSwitch" Header="自动共享粘贴板" Toggled="AutoSyncSwitch_Toggled" />
+                <Button Content="手动同步" Click="ManualSyncButton_Click" />
+            </StackPanel>
+
+            <TextBlock x:Name="SyncStatusText" Text="状态：就绪" />
+
+            <TextBlock FontWeight="SemiBold" Text="运行历史" />
+            <ListView x:Name="HistoryList" Height="260" />
+        </StackPanel>
+    </ScrollViewer>
+</Page>

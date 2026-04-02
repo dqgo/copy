@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<Page
+    x:Class="ClipboardSync_Windows_WinUI.Pages.SettingsPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d">
+
+    <ScrollViewer>
+        <StackPanel Padding="24" Spacing="16">
+            <TextBlock FontSize="26" FontWeight="SemiBold" Text="同步设置" />
+
+            <ToggleSwitch x:Name="PublicRelaySwitch" Header="启用免费公共服务器" Toggled="PublicRelaySwitch_Toggled" />
+            <TextBox x:Name="PublicRelayUrlText" Header="公共服务器地址" />
+            <TextBox x:Name="PublicRelayBucketText" Header="共享桶 ID" />
+
+            <ToggleSwitch x:Name="WebDavSwitch" Header="启用 WebDAV" Toggled="WebDavSwitch_Toggled" />
+            <TextBox x:Name="WebDavUrlText" Header="WebDAV 地址" />
+            <TextBox x:Name="WebDavUserText" Header="用户名" />
+            <PasswordBox x:Name="WebDavPasswordText" Header="密码" />
+
+            <StackPanel Orientation="Horizontal" Spacing="10">
+                <Button Content="测试公共服务器" Click="TestPublicRelayButton_Click" />
+                <Button Content="测试 WebDAV" Click="TestWebDavButton_Click" />
+                <Button Content="保存设置" Click="SaveSettingsButton_Click" />
+            </StackPanel>
+
+            <TextBlock x:Name="SettingsStatusText" Text="状态：就绪" />
+        </StackPanel>
+    </ScrollViewer>
+</Page>
